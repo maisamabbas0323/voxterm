@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+release/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local configuration, secrets and user data
+.env
+.env.*
+!.env.example
+*.local
+.voxterm/
+secrets/
+
+# Diagnostic artifacts
+diagnostics/
+*.heapsnapshot
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Test coverage
+coverage/

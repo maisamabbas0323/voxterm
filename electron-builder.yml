@@ -1,0 +1,26 @@
+appId: dev.voxterm.app
+productName: VoxTerm
+copyright: Copyright © 2026 VoxTerm
+
+directories:
+  buildResources: resources
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+
+asarUnpack:
+  - resources/**
+  - node_modules/node-pty/**
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+  synopsis: Voice-ready terminal workspace for Linux
+  description: VoxTerm combines real operating-system terminals, coding-agent sessions, external terminal integrations, and voice-driven developer workflows.
+  maintainer: VoxTerm
+
+npmRebuild: true
