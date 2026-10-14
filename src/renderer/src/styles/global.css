@@ -23,6 +23,8 @@ body {
   text-rendering: optimizeLegibility;
   overflow: hidden;
   user-select: none;
+  /* Every numeral aligns in columns, UI and mono alike. */
+  font-variant-numeric: tabular-nums;
 }
 
 button,
@@ -563,21 +565,215 @@ textarea.input {
   align-items: start;
 }
 
+/* ---------- Workspace: agent cards ---------- */
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  min-width: 0;
+  transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.agent-card:hover {
+  border-color: var(--border);
+}
+.agent-card--missing {
+  opacity: 0.55;
+}
+.agent-card--ghost .skeleton {
+  height: 100%;
+}
+.agent-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.agent-card__name {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.agent-card__version {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  max-width: 100%;
+}
+.agent-card__launch {
+  width: 100%;
+  margin-top: auto;
+}
+.agent-card__launch svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---------- Workspace: tooling groups ---------- */
+.tool-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.tool-group {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.tool-group__label {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  min-width: 130px;
+}
+.tool-group__count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.chip--found svg {
+  width: 11px;
+  height: 11px;
+  color: var(--success);
+}
+.chip--missing {
+  opacity: 0.45;
+}
+.chip--mini {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 10px;
+  color: var(--text-faint);
+  border-color: var(--border-subtle);
+}
+.list__row--tight {
+  padding: var(--space-2) var(--space-4);
+}
+.list__leveldot {
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.empty--inline {
+  padding: var(--space-4) 0;
+  height: auto;
+}
+.empty--inline .empty__text {
+  font-size: var(--fs-sm);
+}
+
+/* ---------- Skeletons ---------- */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+.skeleton__line {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-hover);
+}
+html:not([data-reduced-motion="true"]) .skeleton__line {
+  animation: skeleton-breathe 1.6s var(--ease-in-out) infinite;
+}
+@keyframes skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--space-3);
 }
 .stat {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   min-width: 0;
 }
+.stat--card {
+  gap: var(--space-2);
+}
+.stat__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+/* Rounded icon plate, shared by stat cards and agent cards. */
+.stat__iconsq {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.stat__dots {
+  min-height: 8px;
+}
+.dot--small {
+  width: 6px;
+  height: 6px;
+}
+.dot--warn {
+  background: var(--warning);
+}
+.dot--alert {
+  background: var(--danger);
+}
+/* Slow status pulse — opt-in via the class, disabled with reduced motion. */
+html:not([data-reduced-motion="true"]) .dot--pulse {
+  animation: dot-pulse 2.4s var(--ease-in-out) infinite;
+}
+.stat__plus {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.stat__link {
+  align-self: flex-start;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-strong);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.stat__link:hover {
+  color: var(--text-primary);
+}
+/* Thin segment bar used on the agents stat card. */
+.statbar {
+  display: inline-flex;
+  gap: 3px;
+}
+.statbar__seg {
+  width: 18px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-active);
+}
+.statbar__seg--on {
+  background: var(--accent);
+}
+
 .stat__label {
   font-size: 10px;
   text-transform: uppercase;
