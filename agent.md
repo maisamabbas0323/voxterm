@@ -277,8 +277,9 @@ prefer adding one more narrow method to the preload bridge over widening the API
   Use `pkill -x electron` / `pkill -x Xvfb` or the `electron[-]vite` bracket trick.
 - The default detected shell on this machine is **zsh**; userData is
   `~/.config/voxterm`.
-- `resources/make-icon.py` (old gradient "V" rasteriser) is superseded by
-  `scripts/make-favicons.py`; keep the new script as the single icon source.
+- The old gradient "V" identity (`resources/icon.svg`,
+  `resources/make-icon.py`) was removed when the new mark shipped;
+  `scripts/make-favicons.py` is the single icon source.
 - The renderer production bundle is ~1.4 MB (zod + xterm + react). Acceptable for
   a desktop app; revisit if startup cost ever regresses.
 
