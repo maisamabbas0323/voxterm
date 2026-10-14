@@ -1,35 +1,38 @@
 /**
- * VoxTerm design tokens. A deep-black, restrained developer interface.
+ * VoxTerm design tokens. A deep-charcoal, restrained developer interface.
  * All colours, spacing, motion and typography values live here so components
- * never hard-code visual constants.
+ * never hard-code visual constants. Surfaces form a tonal ladder — app canvas
+ * is darkest, then sidebar, then panels, then raised/overlay states — with
+ * near-black values instead of absolute black so hierarchy reads even without
+ * borders.
  */
 :root {
-  /* Surfaces */
-  --bg-app: #08080a;
-  --bg-sidebar: #0e0e11;
-  --bg-canvas: #050506;
-  --surface: #131317;
-  --surface-raised: #17171c;
-  --surface-overlay: #1b1b21;
-  --surface-hover: #1f1f26;
-  --surface-active: #26262e;
+  /* Surfaces — a deliberate tonal ladder. */
+  --bg-app: #0a0a0d;
+  --bg-sidebar: #101014;
+  --bg-canvas: #070709;
+  --surface: #141419;
+  --surface-raised: #191920;
+  --surface-overlay: #1e1e26;
+  --surface-hover: #232331;
+  --surface-active: #2a2a38;
 
-  /* Borders */
-  --border-subtle: #1e1e24;
-  --border: #2a2a32;
-  --border-strong: #3a3a45;
+  /* Borders — thin, understated, one step apart from surfaces. */
+  --border-subtle: #20202a;
+  --border: #2c2c38;
+  --border-strong: #3d3d4c;
 
   /* Text */
-  --text-primary: #e9e9ee;
-  --text-secondary: #a1a1ad;
+  --text-primary: #ecedf3;
+  --text-secondary: #a8a8b6;
   --text-muted: #87878f;
-  --text-faint: #4c4c56;
+  --text-faint: #5c5c68;
 
   /* Accent + semantics */
-  --accent: #7aa2f7;
-  --accent-hover: #93b4f9;
-  --accent-press: #6289e0;
-  --accent-soft: rgba(122, 162, 247, 0.14);
+  --accent: #6c8cff;
+  --accent-hover: #8aa2ff;
+  --accent-press: #5a7be6;
+  --accent-soft: rgba(108, 140, 255, 0.14);
   --accent-contrast: #0a0a0c;
   --success: #9ece6a;
   --warning: #e0af68;
@@ -66,12 +69,12 @@
   --radius-lg: 13px;
   --radius-pill: 999px;
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
+  /* Elevation — restrained; borders and tone carry most of the hierarchy. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.5);
 
-  /* Motion */
+  /* Motion — short, consistent, one easing family. */
   --dur-instant: 80ms;
   --dur-fast: 130ms;
   --dur-base: 190ms;

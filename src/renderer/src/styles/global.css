@@ -126,8 +126,11 @@ ul {
 
 .titlebar__logo {
   flex-shrink: 0;
-  border-radius: var(--radius-xs);
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 32%, transparent));
+  color: var(--text-secondary);
+}
+/* The accent bar of the mark picks up the theme accent. */
+.logo-mark__accent {
+  stroke: var(--accent);
 }
 
 .titlebar__name {
@@ -292,14 +295,15 @@ ul {
   flex-shrink: 0;
 }
 .page__title {
-  font-size: var(--fs-xl);
+  font-size: var(--fs-2xl);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .page__subtitle {
   font-size: var(--fs-sm);
-  color: var(--text-muted);
-  margin-top: 2px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  max-width: 60ch;
 }
 .page__actions {
   display: flex;
@@ -565,26 +569,27 @@ textarea.input {
   gap: var(--space-3);
 }
 .stat {
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 3px;
   min-width: 0;
 }
 .stat__label {
-  font-size: var(--fs-xs);
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   color: var(--text-muted);
 }
 .stat__value {
-  font-size: clamp(17px, 2.1vw, 22px);
+  font-size: clamp(16px, 1.8vw, 20px);
   font-weight: 600;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
+  line-height: var(--lh-tight);
 }
 .stat__meta {
   font-size: var(--fs-xs);
@@ -757,7 +762,7 @@ textarea.input {
   position: fixed;
   inset: 0;
   background: rgba(4, 4, 6, 0.66);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(5px);
   display: grid;
   place-items: center;
   z-index: var(--z-overlay);
@@ -934,9 +939,10 @@ textarea.input {
   color: var(--text-primary);
 }
 .tab--active {
-  background: var(--surface-raised);
+  background: var(--surface-hover);
   border-color: var(--border);
   color: var(--text-primary);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .tab__title {
   overflow: hidden;
@@ -1162,9 +1168,11 @@ textarea.input {
 }
 .list__time {
   font-size: var(--fs-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  padding-top: 2px;
 }
 .list__tag {
   font-size: var(--fs-xs);
@@ -1451,6 +1459,59 @@ textarea.input {
   margin-top: 1px;
 }
 
+/* ---------- Voice ---------- */
+.voice-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+.voice-hero__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.voice-hero__title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.voice-hero__detail {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.stat-pill--ok {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+.stat-pill--warn {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
+}
+.stat-pill--off {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
 .tabs__new {
   flex-shrink: 0;
 }
@@ -1472,7 +1533,8 @@ textarea.input {
   align-items: flex-start;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--surface-overlay);
+  background: color-mix(in srgb, var(--surface-overlay) 92%, transparent);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
   font-size: var(--fs-sm);
@@ -1508,8 +1570,7 @@ textarea.input {
   padding: var(--space-8);
 }
 .boot__logo {
-  animation: boot-in var(--dur-base) var(--ease-out) both;
-  filter: drop-shadow(0 10px 30px color-mix(in srgb, var(--accent) 30%, transparent));
+  color: var(--text-primary);
 }
 .boot__name {
   margin-top: var(--space-2);

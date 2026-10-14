@@ -150,12 +150,16 @@ chrome. Structure worth knowing:
   z-index scale); all component styles are in the single `styles/global.css`. New
   UI should reuse tokens and existing primitives (`Field`, `Notice`,
   `EmptyState`, `Switch`, `StatusDot`) rather than introducing one-off values.
-- **Brand mark** — `components/Logo.tsx` renders the "V" monogram as inline SVG
-  (gradient arms, bevelled highlight, a small audio waveform in the mouth of the V
-  and a bright vertex node). It is used in the title bar and the boot splash. The
-  same geometry is the source for `resources/icon.svg`, and
-  `resources/make-icon.py` rasterises `resources/icon.png` for packaging (no SVG
-  rasteriser is required in the build).
+- **Brand mark** — `components/Logo.tsx` renders the VoxTerm mark: a terminal
+  chevron plus three rounded voice bars (short, tall, medium), stroke-built on a
+  64-unit grid with round caps and one flat accent bar. In-app strokes follow
+  `currentColor`; the accent bar picks up `--accent`. Used in the title bar and
+  the boot splash; no gradients or glow anywhere in the identity. Canonical
+  assets live in `assets/brand/` (mark, accent variant, app icon, wordmark with
+  Lato outlines, favicons, `logo-preview.html`). PNG exports are produced by
+  `scripts/make-favicons.py` (geometric PIL rendering, supersampled — no SVG
+  rasteriser needed) into `resources/icon.png` + favicons; the window icon is
+  resolved in `main/window.ts` from the app path.
 - **Terminal font** is a curated dropdown (`lib/fonts.ts` → `TERMINAL_FONTS`), each
   entry a full CSS stack with a live preview. `TERMINAL_FONTS[0].stack` **must**
   equal the `terminalFontFamily` default in `shared/schemas.ts`, otherwise a fresh
@@ -273,6 +277,8 @@ prefer adding one more narrow method to the preload bridge over widening the API
   Use `pkill -x electron` / `pkill -x Xvfb` or the `electron[-]vite` bracket trick.
 - The default detected shell on this machine is **zsh**; userData is
   `~/.config/voxterm`.
+- `resources/make-icon.py` (old gradient "V" rasteriser) is superseded by
+  `scripts/make-favicons.py`; keep the new script as the single icon source.
 - The renderer production bundle is ~1.4 MB (zod + xterm + react). Acceptable for
   a desktop app; revisit if startup cost ever regresses.
 
@@ -302,9 +308,12 @@ plus a helper).
 `scripts/verify-ui.cjs` is the runtime check. It boots the **built** app with the
 real main process and IPC, attaches over the Chrome DevTools Protocol and asserts
 what unit tests cannot: the app leaves the boot screen, every collapsed-sidebar
-nav icon is still visible and centred, the "V" logo renders, no external-session
-wording or "AI" labels remain, the terminal font is a dropdown whose stored value
-resolves to a listed family, and **no page overflows horizontally at either
-desktop width or 560 px** (where the Detected-tooling panel must be hidden). It
-exits non-zero on any failure. See `progress.md` for the latest verified results
-and known limitations.
+nav icon is still visible and centred, the branded logo mark renders, no
+external-session wording or "AI" labels remain, the terminal font is a dropdown
+whose stored value resolves to a listed family, and **no page overflows
+horizontally at either desktop width or 560 px** (where the Detected-tooling
+panel must be hidden). It exits non-zero on any failure. Run it with an isolated
+profile while a dev instance is open (`SMOKE_USER_DATA=/tmp/x CDP_PORT=9333
+xvfb-run -a node scripts/verify-ui.cjs`) — the single-instance lock otherwise
+quits the verify instance before its DevTools port opens. See `progress.md` for
+the latest verified results and known limitations.

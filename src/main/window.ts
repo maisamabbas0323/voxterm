@@ -1,7 +1,29 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL
+
+/**
+ * Resolve the packaged app icon. In development the repository layout keeps it
+ * at <root>/resources; in a packaged build app.getAppPath() points at the app
+ * root (asar paths transparently resolve into app.asar.unpad for unpacked
+ * files). Returns null when missing so Electron falls back gracefully.
+ */
+function resolveAppIcon(): string | null {
+  const candidates = [
+    join(app.getAppPath(), 'resources', 'icon.png'),
+    join(process.resourcesPath ?? '', 'icon.png')
+  ]
+  for (const candidate of candidates) {
+    try {
+      if (candidate && existsSync(candidate)) return candidate
+    } catch {
+      /* keep looking */
+    }
+  }
+  return null
+}
 
 export interface WindowCallbacks {
   onMaximizedChanged?: (maximized: boolean) => void
@@ -18,6 +40,7 @@ export interface WindowCallbacks {
  * through IPC.
  */
 export function createMainWindow(callbacks: WindowCallbacks = {}): BrowserWindow {
+  const icon = resolveAppIcon()
   const window = new BrowserWindow({
     width: 1320,
     height: 860,
@@ -27,6 +50,7 @@ export function createMainWindow(callbacks: WindowCallbacks = {}): BrowserWindow
     frame: false,
     backgroundColor: '#08080a',
     title: 'VoxTerm',
+    ...(icon ? { icon } : {}),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

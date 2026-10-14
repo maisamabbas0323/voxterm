@@ -4,17 +4,18 @@ import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { Settings } from '@shared/schemas'
 
-/** xterm colour theme derived from the VoxTerm design tokens. */const THEME: ITheme = {
-  background: '#050506',
-  foreground: '#e9e9ee',
-  cursor: '#7aa2f7',
-  cursorAccent: '#050506',
-  selectionBackground: 'rgba(122, 162, 247, 0.28)',
+/** xterm colour theme derived from the VoxTerm design tokens. */
+const THEME: ITheme = {
+  background: '#070709',
+  foreground: '#ecedf3',
+  cursor: '#6c8cff',
+  cursorAccent: '#070709',
+  selectionBackground: 'rgba(108, 140, 255, 0.28)',
   black: '#15151a',
   red: '#f7768e',
   green: '#9ece6a',
   yellow: '#e0af68',
-  blue: '#7aa2f7',
+  blue: '#6c8cff',
   magenta: '#bb9af7',
   cyan: '#7dcfff',
   white: '#c0caf5',

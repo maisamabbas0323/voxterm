@@ -69,9 +69,7 @@ export function WorkspacePage(): ReactNode {
             New terminal
           </button>
         </div>
-      </header>
-
-      <div className="page__body stack">
+      </header>        <div className="page__body stack">
         <div className="stat-grid">
           <div className="stat">
             <span className="stat__label">Running sessions</span>
@@ -86,9 +84,9 @@ export function WorkspacePage(): ReactNode {
             <span className="stat__meta">of {agents.length} profiles found on PATH</span>
           </div>
           <div className="stat">
-            <span className="stat__label">Terminal backend</span>
-            <span className="stat__value">{system?.terminalBackend.nodePty ? 'Ready' : 'Unavailable'}</span>
-            <span className="stat__meta">node-pty {system?.terminalBackend.ptyVersion ?? '—'}</span>
+            <span className="stat__label">Local transcription</span>
+            <span className="stat__value">{system?.whisper.available ? 'Ready' : 'Not set up'}</span>
+            <span className="stat__meta">whisper.cpp binary and model on this machine</span>
           </div>
         </div>
 
@@ -181,6 +179,12 @@ export function WorkspacePage(): ReactNode {
                   <span className="kv__value">{system.hostname}</span>
                   <span className="kv__key">Default shell</span>
                   <span className="kv__value">{shortenPath(system.defaultShell) || system.defaultShell}</span>
+                  <span className="kv__key">node-pty</span>
+                  <span className="kv__value">
+                    {system.terminalBackend.nodePty
+                      ? `ready${system.terminalBackend.ptyVersion ? ` · ${system.terminalBackend.ptyVersion}` : ''}`
+                      : (system.terminalBackend.error ?? 'unavailable')}
+                  </span>
                 </div>
               ) : (
                 <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>

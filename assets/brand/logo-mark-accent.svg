@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-label="VoxTerm mark, accent">
+  <!-- Accent variant: the tallest bar carries the product accent; the
+       chevron and remaining bars stay near-white. Flat colour, no gradients. -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12.5 19.5 L25 32 L12.5 44.5" stroke="#F2F4F8" stroke-width="6.5" />
+    <line x1="35.5" y1="26.5" x2="35.5" y2="38.5" stroke="#F2F4F8" stroke-width="6" />
+    <line x1="45"   y1="18"   x2="45"   y2="46.5" stroke="#6C8CFF" stroke-width="6" />
+    <line x1="54.5" y1="23"   x2="54.5" y2="42"   stroke="#F2F4F8" stroke-width="6" />
+  </g>
+</svg>

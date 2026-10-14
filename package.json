@@ -24,7 +24,8 @@
     "package:dir": "npm run build && electron-builder --linux --dir"
   },
   "dependencies": {
-    "node-pty": "1.1.0"
+    "node-pty": "1.1.0",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "@electron/rebuild": "4.2.1",

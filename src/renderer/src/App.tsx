@@ -17,7 +17,7 @@ import { SettingsPage } from './pages/SettingsPage'
 function LoadingScreen(): ReactNode {
   return (
     <div className="boot">
-      <Logo size={72} className="boot__logo" />
+      <Logo size={64} plate className="boot__logo" />
       <div className="boot__name">VoxTerm</div>
       <div className="boot__tagline">Terminal workspace</div>
       <div className="boot__bar" aria-hidden="true">

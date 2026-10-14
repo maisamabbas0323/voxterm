@@ -10,6 +10,65 @@ limitations below).
 
 ---
 
+## Milestone 1.2 — Brand refresh + UI/UX pass (this change)
+
+### New hand-crafted mark, all gradients retired
+- Assets live in `assets/brand/`: `logo-mark.svg` (64-grid, `currentColor`),
+  `logo-mark-accent.svg` (tallest bar #6C8CFF, rest #F2F4F8), `app-icon.svg`
+  (black rounded plate, mark ≈55% width), `wordmark.svg` (mark at cap height
+  beside "VoxTerm" outlines extracted from Lato Semibold — no font needed to
+  render it), and `favicon-{16,32,48,256}.png`. `logo-preview.html` shows
+  every size and surface before use.
+- The mark: a **terminal chevron plus three rounded voice bars (short, tall,
+  medium)** — “Vox” and “Term” in one stroke-built gesture. Round caps, two
+  stroke weights (6.5 / 6 on a 64-unit grid), one flat accent colour, no
+  gradients, no glow, no letter V.
+- PNG exports are geometric, not SVG-rasterised: `scripts/make-favicons.py`
+  mirrors the mark coordinates with PIL (8× supersample) and produces the
+  favicons plus `resources/icon.png` (512²) used by electron-builder and now
+  passed to the BrowserWindow (`main/window.ts` resolves it from the app
+  path, falling back to `process.resourcesPath`).
+- `scripts/make-wordmark.py` extracts real glyph outlines from Lato Semibold
+  so the committed `wordmark.svg` is pure paths.
+- In-app: `components/Logo.tsx` renders the new mark (strokes follow
+  `currentColor`, accent bar picks up `--accent`); boot splash and title bar
+  use it.
+
+### Design system + shell polish
+- Tokens refreshed: surfaces sit on a deliberate near-black tonal ladder,
+  borders one step apart from surfaces, text contrast raised, and the theme
+  accent unified on the brand blue `#6C8CFF` (terminal theme follows).
+- Page titles use the display size; subtitles are capped in measure length.
+- Stat cards are compact (smaller padding/type scale) — information density
+  over dashboard sprawl; the redundant “Terminal backend” card was folded
+  into the System panel (which always reflected the real node-pty check).
+- Activity rows get an explicit repeat-count pill; coalesced events now show
+  e.g. “Settings updated: appearance x6”.
+- Toasts and overlays pick up restrained backdrop blur; active tabs get a
+  2px accent underline; helper text everywhere uses the raised muted value.
+
+### Voice page, told honestly
+- One hero status row (off / runtime-not-ready / ready) backed by real
+  checks: whisper-server binary on PATH, GGML model on disk, language,
+  hotkey and review preference. A four-step flow (capture → transcribe →
+  review → send) explains the intended pipeline, and the page states plainly
+  that capture/transcription is not active in this build. No decorative
+  waveform, no fake states. (Capture pipelines are still future work.)
+
+### Verification
+- `npm run typecheck`, `npm run lint` (0 errors, 4 warnings),
+  `npm test` (19/19), `npm run build`, and `npm run verify:ui` (25/25):
+  all pass, including no horizontal overflow at 1320px and 560px on every
+  page, and the nav rail still renders correctly with tooltips attached.
+- Note: `verify:ui` needs an isolated profile when a dev instance holds the
+  single-instance lock: `SMOKE_USER_DATA=/tmp/x CDP_PORT=9333 xvfb-run -a
+  node scripts/verify-ui.cjs`.
+- Not performed here: real visual inspection on macOS/Windows (Linux Xvfb
+  only), and eyeballing the SVG renders — geometry was validated
+  programmatically (pixel sampling) rather than by eye.
+
+---
+
 ## Milestone 1 — Electron foundation
 
 - Single-instance lock, `whenReady` bootstrap, graceful close flow with a

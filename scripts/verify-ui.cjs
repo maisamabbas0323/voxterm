@@ -169,7 +169,7 @@ async function main() {
     const logoCount = await evaluate(
       `document.querySelectorAll('svg[aria-label="VoxTerm"]').length`
     )
-    check('branded V logo is rendered in the title bar', logoCount >= 1, `count=${logoCount}`)
+    check('branded logo mark is rendered in the title bar', logoCount >= 1, `count=${logoCount}`)
 
     // --- No external-session UI remains ---------------------------------------
     const pages = ['workspace', 'terminals', 'voice', 'activity', 'settings']
