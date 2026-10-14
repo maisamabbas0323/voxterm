@@ -180,115 +180,98 @@ ul {
   color: #fff;
 }
 
-/* ---------- Sidebar ---------- */
+/* ---------- Sidebar (permanent icon rail) ---------- */
 .sidebar {
+  position: relative;
   width: var(--sidebar-width-compact);
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  padding: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) var(--space-2) var(--space-3);
   gap: var(--space-1);
   flex-shrink: 0;
   z-index: var(--z-sidebar);
-  transition: width var(--dur-base) var(--ease-out);
+  overflow: hidden;
 }
-.sidebar--expanded {
-  width: var(--sidebar-width-expanded);
+/* A soft wash of accent at the top gives the rail depth without shouting. */
+.sidebar__sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 38%);
 }
 
 .sidebar__nav {
+  position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-1);
   flex: 1;
   min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+.sidebar__nav::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar__footer {
+  position: relative;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-1);
-  border-top: 1px solid var(--border-subtle);
   padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  height: 40px;
-  padding: 0 11px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
   position: relative;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-  white-space: nowrap;
-  overflow: hidden;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .nav-item:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
+.nav-item:active {
+  transform: scale(0.93);
+}
 .nav-item--active {
   background: var(--accent-soft);
   color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    0 0 20px -8px color-mix(in srgb, var(--accent) 85%, transparent);
 }
+/* The indicator lives in the rail gutter, so it is never clipped away. */
 .nav-item--active::before {
   content: "";
   position: absolute;
-  left: -8px;
+  left: -7px;
   top: 50%;
   transform: translateY(-50%);
   width: 3px;
   height: 20px;
   border-radius: 0 3px 3px 0;
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent-hover), var(--accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 .nav-item__icon {
-  flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 20px;
-}
-.nav-item__label {
-  font-size: var(--fs-md);
-  font-weight: 500;
-  opacity: 0;
-  max-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  transition: opacity var(--dur-fast) var(--ease-out), max-width var(--dur-base) var(--ease-out);
-}
-.sidebar--expanded .nav-item__label {
-  opacity: 1;
-  max-width: 200px;
-}
-/* In compact mode the label is fully removed from layout so the icon stays
-   perfectly centred instead of being pushed out of the rail. */
-.sidebar:not(.sidebar--expanded) .nav-item {
-  justify-content: center;
-  padding: 0;
-  gap: 0;
-}
-.sidebar__collapse {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  height: 34px;
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-.sidebar__collapse:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-.sidebar__collapse span {
-  font-size: var(--fs-sm);
-  white-space: nowrap;
 }
 
 /* ---------- Page scaffolding ---------- */
@@ -540,6 +523,7 @@ textarea.input {
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
 }
 .panel__title {
   font-size: var(--fs-md);
@@ -568,7 +552,7 @@ textarea.input {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--space-3);
 }
 .stat {
@@ -588,9 +572,10 @@ textarea.input {
   color: var(--text-muted);
 }
 .stat__value {
-  font-size: var(--fs-2xl);
+  font-size: clamp(17px, 2.1vw, 22px);
   font-weight: 600;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 .stat__meta {
   font-size: var(--fs-xs);
@@ -598,6 +583,13 @@ textarea.input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Monospaced, slightly smaller value for things like hotkeys and paths. */
+.stat__value--mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 /* ---------- Status dots ---------- */
@@ -672,6 +664,22 @@ textarea.input {
   letter-spacing: 0.1em;
   color: var(--text-muted);
   font-weight: 600;
+}
+/* Keyboard hint, used for hotkeys shown in the UI. */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
 }
 .divider {
   height: 1px;
@@ -962,6 +970,7 @@ textarea.input {
   inset: 0;
   padding: var(--space-2) 0 0 var(--space-3);
   visibility: hidden;
+  overflow: hidden;
 }
 .terminal-surface--active {
   visibility: visible;
@@ -1023,12 +1032,50 @@ textarea.input {
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-app);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 .terminal-toolbar__actions {
   display: flex;
   align-items: center;
   gap: var(--space-1);
   flex-shrink: 0;
+}
+/* Terminal zoom: font-size only, so it never scales the surrounding UI. */
+.terminal-zoom {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  margin-left: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+.terminal-zoom__button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 100%;
+  color: var(--text-secondary);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.terminal-zoom__button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.terminal-zoom__value {
+  height: 100%;
+  min-width: 46px;
+  padding: 0 4px;
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.terminal-zoom__value:hover {
+  color: var(--text-primary);
 }
 .terminal-meta {
   display: flex;
@@ -1080,6 +1127,7 @@ textarea.input {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
   transition: background var(--dur-fast) var(--ease-out);
+  flex-wrap: wrap;
 }
 .list__row:hover {
   background: var(--surface);
@@ -1087,10 +1135,15 @@ textarea.input {
 .list__row:last-child {
   border-bottom: none;
 }
+/* Rows keep a readable floor; trailing actions wrap instead of squashing text. */
+.list__row > .grow {
+  min-width: 180px;
+}
 .list__primary {
   font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
+  min-width: 0;
 }
 .list__secondary {
   font-size: var(--fs-xs);
@@ -1194,8 +1247,22 @@ textarea.input {
   padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
   overflow-y: auto;
+}
+.settings__nav-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--space-1);
+}
+.settings__nav-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.settings__nav-caption {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
 }
 .settings__search {
   flex-shrink: 0;
@@ -1228,13 +1295,25 @@ textarea.input {
   color: var(--text-secondary);
   font-size: var(--fs-sm);
   text-align: left;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.settings__link svg {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: color var(--dur-fast) var(--ease-out);
 }
 .settings__link:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
+.settings__link:hover svg {
+  color: var(--text-muted);
+}
 .settings__link--active {
   background: var(--accent-soft);
+  color: var(--accent);
+}
+.settings__link--active svg {
   color: var(--accent);
 }
 .settings__content {
@@ -1517,9 +1596,22 @@ textarea.input {
 /* ---------- Activity filters ---------- */
 .activity-controls {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.activity-controls__row {
+  display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
   flex-wrap: wrap;
+}
+.activity-controls__row > .section-title {
+  flex-shrink: 0;
+}
+.activity-controls__row > .chip-row--scroll {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 .chip-row--scroll {
   flex-wrap: nowrap;
@@ -1589,28 +1681,40 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 /* ---------- Responsive ---------- */
-.hide-sm {
+.hide-sm,
+.hide-md {
   display: inline;
 }
-@media (max-width: 1020px) {
-  /* Detected tooling is reference material; drop it first on smaller windows. */
+@media (max-width: 1180px) {
+  /* Detected tooling is reference material; drop the whole card first. */
   .workspace__tooling {
     display: none;
   }
+}
+@media (max-width: 1020px) {
   .split {
     grid-template-columns: 1fr;
   }
 }
 @media (max-width: 860px) {
-  .terminal-meta__item {
+  .hide-md {
     display: none;
+  }
+  /* Terminal metadata thins out to name + directory instead of overflowing. */
+  .terminal-meta__item--secondary {
+    display: none;
+  }
+  .terminal-meta__title {
+    max-width: 180px;
   }
   .page__header {
     flex-direction: column;
     align-items: flex-start;
+    gap: var(--space-3);
   }
   .page__actions {
     width: 100%;
+    flex-wrap: wrap;
   }
   .settings {
     flex-direction: column;
@@ -1621,6 +1725,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
     border-bottom: 1px solid var(--border-subtle);
     flex-direction: column;
     overflow: visible;
+    gap: var(--space-2);
   }
   .settings__links {
     flex-direction: row;
@@ -1644,10 +1749,25 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
     margin-left: 0;
     flex: 1 1 100%;
   }
+  .list__row > .grow {
+    min-width: 0;
+  }
 }
 @media (max-width: 640px) {
   .hide-sm {
     display: none;
+  }
+  .page__header {
+    padding: var(--space-3) var(--space-4);
+  }
+  .page__body {
+    padding: var(--space-4);
+  }
+  .terminal-meta__item {
+    display: none;
+  }
+  .terminal-meta__title {
+    max-width: none;
   }
   .stat-grid {
     grid-template-columns: 1fr;

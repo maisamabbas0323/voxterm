@@ -7,6 +7,7 @@ import { ToastStack } from './components/Toasts'
 import { Modal } from './components/Modal'
 import { Logo } from './components/Logo'
 import { NAV_ITEMS } from './components/nav'
+import { terminalRegistry } from './features/terminals/registry'
 import { TerminalsPage } from './pages/TerminalsPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { ActivityPage } from './pages/ActivityPage'
@@ -52,6 +53,19 @@ export function App(): ReactNode {
       const mod = event.ctrlKey || event.metaKey
       if (!mod) return
       const key = event.key.toLowerCase()
+
+      // Ctrl +/−/0 resize the terminal font. Zoom is deliberately scoped to the
+      // terminal: the main process disables page zoom, so the surrounding
+      // interface never scales with it.
+      const zoomIn = key === '=' || key === '+'
+      const zoomOut = key === '-' || key === '_'
+      const zoomReset = key === '0' && !event.shiftKey
+      if ((zoomIn || zoomOut || zoomReset) && sessions.length > 0) {
+        event.preventDefault()
+        if (zoomReset) terminalRegistry.resetZoom()
+        else terminalRegistry.zoomBy(zoomIn ? 1 : -1)
+        return
+      }
 
       if (event.shiftKey && key === 't') {
         event.preventDefault()
@@ -102,12 +116,7 @@ export function App(): ReactNode {
     <div className="app">
       <TitleBar contextLabel={contextLabel} />
       <div className="app-body">
-        <Sidebar
-          active={nav}
-          expanded={state.sidebarExpanded}
-          onNavigate={actions.navigate}
-          onToggleExpanded={actions.toggleSidebar}
-        />
+        <Sidebar active={nav} onNavigate={actions.navigate} />
         <main className="app-main">
           {nav === 'workspace' ? <WorkspacePage /> : null}
           {nav === 'terminals' ? <TerminalsPage /> : null}

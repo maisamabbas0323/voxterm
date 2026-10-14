@@ -44,6 +44,19 @@ export function createMainWindow(callbacks: WindowCallbacks = {}): BrowserWindow
     window.show()
   })
 
+  // Zoom is a *terminal* concern in VoxTerm, never a page concern. Pinch and
+  // Ctrl+wheel must not scale the whole interface, so visual zoom is disabled
+  // and any requested page zoom is immediately reset. The renderer applies
+  // zoom to the terminal font instead.
+  window.webContents.setVisualZoomLevelLimits(1, 1)
+  window.webContents.on('zoom-changed', (event) => {
+    event.preventDefault()
+    window.webContents.setZoomFactor(1)
+  })
+  window.webContents.on('did-finish-load', () => {
+    window.webContents.setZoomFactor(1)
+  })
+
   window.on('maximize', () => callbacks.onMaximizedChanged?.(true))
   window.on('unmaximize', () => callbacks.onMaximizedChanged?.(false))
 

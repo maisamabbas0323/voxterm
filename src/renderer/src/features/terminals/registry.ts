@@ -4,8 +4,7 @@ import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { Settings } from '@shared/schemas'
 
-/** xterm colour theme derived from the VoxTerm design tokens. */
-const THEME: ITheme = {
+/** xterm colour theme derived from the VoxTerm design tokens. */const THEME: ITheme = {
   background: '#050506',
   foreground: '#e9e9ee',
   cursor: '#7aa2f7',
@@ -29,6 +28,21 @@ const THEME: ITheme = {
   brightWhite: '#ffffff'
 }
 
+const FONT_SIZE_MIN = 8
+const FONT_SIZE_MAX = 48
+const DEFAULT_FONT_SIZE = 13
+const ZOOM_MIN = -24
+const ZOOM_MAX = 24
+
+/**
+ * Terminal zoom is applied to the font size only, so zooming never changes the
+ * surrounding interface. The configured preference is the base; the transient
+ * zoom step is layered on top and clamped to a readable range.
+ */
+function resolveFontSize(base: number, zoom: number): number {
+  return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(base + zoom)))
+}
+
 /**
  * Owns a single xterm.js instance for a session. xterm instances are cached by
  * session id and survive React remounts (e.g. StrictMode) so scrollback is
@@ -45,12 +59,13 @@ export class TerminalController {
 
   constructor(
     readonly sessionId: string,
-    settings: Settings
+    settings: Settings,
+    zoom = 0
   ) {
     const appearance = settings.appearance
     this.term = new Terminal({
       fontFamily: appearance.terminalFontFamily,
-      fontSize: appearance.terminalFontSize,
+      fontSize: resolveFontSize(appearance.terminalFontSize, zoom),
       lineHeight: appearance.terminalLineHeight,
       cursorStyle: appearance.cursorStyle,
       cursorBlink: appearance.cursorBlink,
@@ -150,10 +165,10 @@ export class TerminalController {
     }
   }
 
-  setAppearance(settings: Settings): void {
+  setAppearance(settings: Settings, zoom: number): void {
     const appearance = settings.appearance
     this.term.options.fontFamily = appearance.terminalFontFamily
-    this.term.options.fontSize = appearance.terminalFontSize
+    this.term.options.fontSize = resolveFontSize(appearance.terminalFontSize, zoom)
     this.term.options.lineHeight = appearance.terminalLineHeight
     this.term.options.cursorStyle = appearance.cursorStyle
     this.term.options.cursorBlink = appearance.cursorBlink
@@ -206,6 +221,8 @@ class TerminalRegistry {
   private unsubscribers: Array<() => void> = []
   private started = false
   private appearance: Settings | null = null
+  private zoom = 0
+  private zoomListeners = new Set<(zoom: number) => void>()
   private hydrated = new Set<string>()
   private pendingCommands = new Map<string, string>()
 
@@ -223,8 +240,42 @@ class TerminalRegistry {
   applyAppearance(settings: Settings): void {
     this.appearance = settings
     for (const controller of this.controllers.values()) {
-      controller.setAppearance(settings)
+      controller.setAppearance(settings, this.zoom)
     }
+  }
+
+  /** Transient zoom step in pixels, layered over the configured font size. */
+  getZoom(): number {
+    return this.zoom
+  }
+
+  /** The font size the terminal is actually rendering at. */
+  effectiveFontSize(): number {
+    return resolveFontSize(this.appearance?.appearance.terminalFontSize ?? DEFAULT_FONT_SIZE, this.zoom)
+  }
+
+  zoomBy(delta: number): void {
+    this.setZoom(this.zoom + delta)
+  }
+
+  resetZoom(): void {
+    this.setZoom(0)
+  }
+
+  /** Subscribe to zoom changes. Returns an unsubscribe function. */
+  onZoomChange(listener: (zoom: number) => void): () => void {
+    this.zoomListeners.add(listener)
+    return () => {
+      this.zoomListeners.delete(listener)
+    }
+  }
+
+  private setZoom(next: number): void {
+    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(next)))
+    if (clamped === this.zoom) return
+    this.zoom = clamped
+    if (this.appearance) this.applyAppearance(this.appearance)
+    for (const listener of this.zoomListeners) listener(this.zoom)
   }
 
   /** Create (or reuse) the controller for a session and attach it to a container. */
@@ -232,7 +283,7 @@ class TerminalRegistry {
     this.appearance = this.appearance ?? settings
     let controller = this.controllers.get(sessionId)
     if (!controller) {
-      controller = new TerminalController(sessionId, settings)
+      controller = new TerminalController(sessionId, settings, this.zoom)
       this.controllers.set(sessionId, controller)
       const created = controller
       // Pull any output produced before this session was displayed, then play

@@ -121,17 +121,19 @@ export function WorkspacePage(): ReactNode {
                           className={agent.available ? 'dot dot--running' : 'dot dot--exited'}
                           aria-hidden="true"
                         />
-                        <span className="list__primary">{agent.name}</span>
+                        <span className="list__primary truncate">{agent.name}</span>
                         {!agent.available ? (
-                          <span className="list__tag">not on PATH</span>
+                          <span className="list__tag hide-sm">not on PATH</span>
                         ) : null}
                       </div>
-                      <div className="list__secondary mono">
+                      <div className="list__secondary mono truncate">
                         {agent.command}
                         {agent.args.length > 0 ? ` ${agent.args.join(' ')}` : ''}
-                        {agent.version ? ` · ${agent.version}` : ''}
+                        {agent.version ? <span className="hide-md">{` · ${agent.version}`}</span> : null}
                       </div>
-                      {agent.description ? <div className="list__secondary">{agent.description}</div> : null}
+                      {agent.description ? (
+                        <div className="list__secondary hide-md">{agent.description}</div>
+                      ) : null}
                     </div>
                     <Tooltip
                       label={agent.available ? `Launch ${agent.name}` : `${agent.name} is not installed`}
@@ -139,11 +141,12 @@ export function WorkspacePage(): ReactNode {
                     >
                       <button
                         className="btn btn--sm"
+                        aria-label={agent.available ? `Launch ${agent.name}` : `${agent.name} is not installed`}
                         disabled={!agent.available}
                         onClick={() => void launchAgent(agent)}
                       >
                         <Play size={13} />
-                        Launch
+                        <span className="hide-sm">Launch</span>
                       </button>
                     </Tooltip>
                   </li>

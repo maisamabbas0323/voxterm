@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { KeyRound, RotateCcw, ShieldCheck } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  Cpu,
+  KeyRound,
+  Mic,
+  Palette,
+  RotateCcw,
+  ShieldCheck,
+  SquareTerminal,
+  Volume2,
+  Wand2
+} from 'lucide-react'
 import { SETTINGS_SECTIONS, type SecretSlot, type Settings, type SettingsSection } from '@shared/schemas'
 import { useApp } from '../state/store'
 import { Notice, Switch } from '../components/primitives'
@@ -14,6 +25,16 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   announcements: 'Announcements',
   privacy: 'Privacy',
   system: 'System & credentials'
+}
+
+const SECTION_ICONS: Record<SettingsSection, LucideIcon> = {
+  appearance: Palette,
+  terminal: SquareTerminal,
+  voice: Mic,
+  prompts: Wand2,
+  announcements: Volume2,
+  privacy: ShieldCheck,
+  system: Cpu
 }
 
 /** A single settings row: description on the left, control on the right. */
@@ -216,6 +237,10 @@ export function SettingsPage(): ReactNode {
   return (
     <div className="settings">
       <nav className="settings__nav" aria-label="Settings sections">
+        <div className="settings__nav-head">
+          <span className="settings__nav-title">Settings</span>
+          <span className="settings__nav-caption">Changes save automatically</span>
+        </div>
         <div className="settings__search">
           <input
             className="input"
@@ -226,18 +251,25 @@ export function SettingsPage(): ReactNode {
           />
         </div>
         <div className="settings__links">
-          {visibleSections.map((key) => (
-            <button
-              key={key}
-              className={key === section ? 'settings__link settings__link--active' : 'settings__link'}
-              onClick={() => setSection(key)}
-            >
-              {SECTION_LABELS[key]}
-            </button>
-          ))}
+          {visibleSections.map((key) => {
+            const Icon = SECTION_ICONS[key]
+            const isActive = key === section
+            return (
+              <button
+                key={key}
+                type="button"
+                className={isActive ? 'settings__link settings__link--active' : 'settings__link'}
+                aria-current={isActive ? 'true' : undefined}
+                onClick={() => setSection(key)}
+              >
+                <Icon size={15} />
+                {SECTION_LABELS[key]}
+              </button>
+            )
+          })}
           {visibleSections.length === 0 ? <span className="settings__empty">No matches</span> : null}
         </div>
-        <div className="settings__note">Changes save automatically.</div>
+        <div className="settings__note">VoxTerm {state.system?.appVersion ?? '—'}</div>
       </nav>
 
       <div className="settings__content">

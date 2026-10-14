@@ -25,6 +25,19 @@ export function TerminalSurface({ sessionId, active, settings }: TerminalSurface
   }, [sessionId])
 
   useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    // Ctrl+wheel zooms the terminal font only, so the app never scales.
+    const onWheel = (event: WheelEvent): void => {
+      if (!event.ctrlKey) return
+      event.preventDefault()
+      terminalRegistry.zoomBy(event.deltaY < 0 ? 1 : -1)
+    }
+    container.addEventListener('wheel', onWheel, { passive: false })
+    return () => container.removeEventListener('wheel', onWheel)
+  }, [])
+
+  useEffect(() => {
     if (!active) return
     const frame = requestAnimationFrame(() => {
       terminalRegistry.refit(sessionId)

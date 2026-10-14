@@ -37,10 +37,26 @@ export function TerminalTabs({
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; session: TerminalSessionInfo } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const tabRefs = useRef(new Map<string, HTMLDivElement>())
 
   useEffect(() => {
     if (renaming) inputRef.current?.select()
   }, [renaming])
+
+  // Keep the active tab in view when sessions are added or switched.
+  useEffect(() => {
+    if (!activeId) return
+    tabRefs.current.get(activeId)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [activeId, sessions.length])
+
+  const moveSelection = (from: string, delta: number): void => {
+    if (sessions.length < 2) return
+    const index = sessions.findIndex((session) => session.id === from)
+    const next = sessions[(index + delta + sessions.length) % sessions.length]
+    if (!next) return
+    onSelect(next.id)
+    requestAnimationFrame(() => tabRefs.current.get(next.id)?.focus())
+  }
 
   const commitRename = (): void => {
     if (!renaming) return
@@ -77,6 +93,10 @@ export function TerminalTabs({
           return (
             <div
               key={session.id}
+              ref={(node) => {
+                if (node) tabRefs.current.set(session.id, node)
+                else tabRefs.current.delete(session.id)
+              }}
               role="tab"
               tabIndex={isActive ? 0 : -1}
               aria-selected={isActive}
@@ -87,6 +107,11 @@ export function TerminalTabs({
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
                   onSelect(session.id)
+                  return
+                }
+                if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+                  event.preventDefault()
+                  moveSelection(session.id, event.key === 'ArrowRight' ? 1 : -1)
                 }
               }}
               onAuxClick={(event) => {

@@ -51,6 +51,28 @@ export function VoicePage(): ReactNode {
           milestone. The preferences below are stored now and will apply once the runtime arrives.
         </Notice>
 
+        <div className="stat-grid">
+          <div className="stat">
+            <span className="stat__label">Voice input</span>
+            <span className="stat__value">{settings?.voice.enabled ? 'Enabled' : 'Disabled'}</span>
+            <span className="stat__meta">
+              {settings?.voice.pushToTalk ? 'Push-to-talk' : 'Toggle mode'} · stored preference
+            </span>
+          </div>
+          <div className="stat">
+            <span className="stat__label">Hotkey</span>
+            <span className="stat__value stat__value--mono">{settings?.voice.hotkey ?? '—'}</span>
+            <span className="stat__meta">Bound once the capture runtime ships</span>
+          </div>
+          <div className="stat">
+            <span className="stat__label">Transcription</span>
+            <span className="stat__value">{settings?.voice.transcriptionProvider ?? 'none'}</span>
+            <span className="stat__meta">
+              {settings?.voice.whisperModelPath ? 'Local model configured' : 'No local model configured'}
+            </span>
+          </div>
+        </div>
+
         <div className="panel">
           <div className="panel__header">
             <div className="col">

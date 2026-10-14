@@ -80,8 +80,7 @@
 
   /* Layout */
   --titlebar-height: 38px;
-  --sidebar-width-compact: 56px;
-  --sidebar-width-expanded: 216px;
+  --sidebar-width-compact: 60px;
 
   /* z-index scale */
   --z-sidebar: 20;

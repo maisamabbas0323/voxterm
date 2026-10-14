@@ -18,7 +18,6 @@ export const appearanceSettingsSchema = z.object({
   terminalLineHeight: z.number().min(1).max(2.5).default(1.3),
   cursorStyle: z.enum(['block', 'underline', 'bar']).default('block'),
   cursorBlink: z.boolean().default(true),
-  sidebarMode: z.enum(['compact', 'expanded']).default('compact'),
   reducedMotion: z.boolean().default(false),
   animationIntensity: z.enum(['none', 'subtle', 'full']).default('subtle'),
   interfaceDensity: z.enum(['comfortable', 'compact']).default('comfortable')

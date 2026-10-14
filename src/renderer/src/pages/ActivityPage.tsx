@@ -6,7 +6,8 @@ import {
   Info,
   Search,
   Trash2,
-  TriangleAlert
+  TriangleAlert,
+  X
 } from 'lucide-react'
 import type { ActivityCategory, ActivityEvent } from '@shared/types'
 import { useApp } from '../state/store'
@@ -24,6 +25,14 @@ const CATEGORIES: Array<{ key: ActivityCategory | 'all'; label: string }> = [
   { key: 'error', label: 'Errors' }
 ]
 
+const LEVELS: Array<{ key: ActivityEvent['level'] | 'all'; label: string }> = [
+  { key: 'all', label: 'Any' },
+  { key: 'info', label: 'Info' },
+  { key: 'success', label: 'Success' },
+  { key: 'warn', label: 'Warnings' },
+  { key: 'error', label: 'Errors' }
+]
+
 function EventIcon({ level }: { level: ActivityEvent['level'] }): ReactNode {
   if (level === 'success') return <CheckCircle2 size={14} />
   if (level === 'warn') return <TriangleAlert size={14} />
@@ -34,19 +43,23 @@ function EventIcon({ level }: { level: ActivityEvent['level'] }): ReactNode {
 export function ActivityPage(): ReactNode {
   const { state, actions } = useApp()
   const [filter, setFilter] = useState<ActivityCategory | 'all'>('all')
+  const [level, setLevel] = useState<ActivityEvent['level'] | 'all'>('all')
   const [query, setQuery] = useState('')
+
+  const filtered = filter !== 'all' || level !== 'all' || query.trim().length > 0
 
   const events = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const list = state.activity.filter((event) => {
       if (filter !== 'all' && event.category !== filter) return false
+      if (level !== 'all' && event.level !== level) return false
       if (needle && !event.message.toLowerCase().includes(needle) && !event.type.toLowerCase().includes(needle)) {
         return false
       }
       return true
     })
     return [...list].reverse()
-  }, [state.activity, filter, query])
+  }, [state.activity, filter, level, query])
 
   return (
     <div className="page">
@@ -76,27 +89,60 @@ export function ActivityPage(): ReactNode {
 
       <div className="page__body stack">
         <div className="activity-controls">
-          <div className="chip-row chip-row--scroll">
-            {CATEGORIES.map((category) => (
-              <button
-                key={category.key}
-                className={filter === category.key ? 'chip chip--active' : 'chip'}
-                onClick={() => setFilter(category.key)}
-              >
-                {category.label}
-              </button>
-            ))}
+          <div className="activity-controls__row">
+            <span className="section-title">Category</span>
+            <div className="chip-row chip-row--scroll">
+              {CATEGORIES.map((category) => (
+                <button
+                  key={category.key}
+                  className={filter === category.key ? 'chip chip--active' : 'chip'}
+                  aria-pressed={filter === category.key}
+                  onClick={() => setFilter(category.key)}
+                >
+                  {category.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <label className="activity-search">
-            <Search size={14} className="muted" />
-            <input
-              className="activity-search__input"
-              placeholder="Filter events…"
-              aria-label="Filter activity events"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
+
+          <div className="activity-controls__row">
+            <span className="section-title">Level</span>
+            <div className="chip-row chip-row--scroll">
+              {LEVELS.map((item) => (
+                <button
+                  key={item.key}
+                  className={level === item.key ? 'chip chip--active' : 'chip'}
+                  aria-pressed={level === item.key}
+                  onClick={() => setLevel(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            {filtered ? (
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => {
+                  setFilter('all')
+                  setLevel('all')
+                  setQuery('')
+                }}
+              >
+                <X size={13} />
+                Reset filters
+              </button>
+            ) : null}
+            <label className="activity-search">
+              <Search size={14} className="muted" />
+              <input
+                className="activity-search__input"
+                placeholder="Filter events…"
+                aria-label="Filter activity events"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+          </div>
         </div>
 
         <div className="panel">
@@ -116,7 +162,7 @@ export function ActivityPage(): ReactNode {
             <>
               <div className="panel__header">
                 <span className="panel__caption">
-                  {events.length} event{events.length === 1 ? '' : 's'}
+                  {events.length} of {state.activity.length} event{state.activity.length === 1 ? '' : 's'}
                 </span>
               </div>
               <ul className="list">

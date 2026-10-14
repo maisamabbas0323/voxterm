@@ -31,7 +31,6 @@ interface State {
   system: SystemInfo | null
   agents: AgentProfileStatus[]
   nav: NavKey
-  sidebarExpanded: boolean
   toasts: ToastRecord[]
   closePrompt: AppCloseRequestPayload | null
 }
@@ -59,7 +58,6 @@ type Action =
   | { type: 'system'; system: SystemInfo }
   | { type: 'agents'; agents: AgentProfileStatus[] }
   | { type: 'nav'; nav: NavKey }
-  | { type: 'sidebar'; expanded: boolean }
   | { type: 'toast-add'; toast: ToastRecord }
   | { type: 'toast-dismiss'; id: string }
   | { type: 'close-prompt'; payload: AppCloseRequestPayload | null }
@@ -75,7 +73,6 @@ const initialState: State = {
   system: null,
   agents: [],
   nav: 'terminals',
-  sidebarExpanded: false,
   toasts: [],
   closePrompt: null
 }
@@ -134,8 +131,6 @@ function reducer(state: State, action: Action): State {
       return { ...state, agents: action.agents }
     case 'nav':
       return { ...state, nav: action.nav }
-    case 'sidebar':
-      return { ...state, sidebarExpanded: action.expanded }
     case 'toast-add':
       return { ...state, toasts: [...state.toasts, action.toast] }
     case 'toast-dismiss':
@@ -149,7 +144,6 @@ function reducer(state: State, action: Action): State {
 
 interface AppActions {
   navigate: (key: NavKey) => void
-  toggleSidebar: () => void
   setActiveSession: (id: string) => void
   createTerminal: (options?: { cwd?: string; title?: string; shell?: string; args?: string[] }) => Promise<TerminalSessionInfo | null>
   renameSession: (id: string, title: string) => Promise<void>
@@ -178,8 +172,6 @@ function errorMessage(error: unknown): string {
 export function AppProvider({ children }: { children: ReactNode }): ReactNode {
   const [state, dispatch] = useReducer(reducer, initialState)
   const autoCreated = useRef(false)
-  const stateRef = useRef(state)
-  stateRef.current = state
 
   const toast = useCallback((message: string, tone: ToastRecord['tone'] = 'info') => {
     dispatch({
@@ -375,8 +367,6 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
   const actions = useMemo<AppActions>(
     () => ({
       navigate: (nav) => dispatch({ type: 'nav', nav }),
-      toggleSidebar: () =>
-        dispatch({ type: 'sidebar', expanded: !stateRef.current.sidebarExpanded }),
       setActiveSession: (id) => {
         dispatch({ type: 'active', id })
         terminalRegistry.focus(id)

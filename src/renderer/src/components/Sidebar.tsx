@@ -1,59 +1,47 @@
 import type { ReactNode } from 'react'
-import { ChevronsLeft, ChevronsRight } from 'lucide-react'
-import { NAV_ITEMS, type NavKey } from './nav'
-import { Tooltip } from './Tooltip'
+import { NAV_ITEMS, type NavItem, type NavKey } from './nav'
 
 interface SidebarProps {
   active: NavKey
-  expanded: boolean
   onNavigate: (key: NavKey) => void
-  onToggleExpanded: () => void
 }
 
+const PRIMARY_ITEMS = NAV_ITEMS.filter((item) => item.group === 'primary')
+const FOOTER_ITEMS = NAV_ITEMS.filter((item) => item.group === 'footer')
+
 /**
- * Narrow, rounded vertical navigation. Icons are centred in compact mode and
- * paired with labels in expanded mode. Every item is a real button with an
- * accessible label and a tooltip.
+ * Permanent icon rail. The sidebar neither collapses nor expands: the sections
+ * are always one click away at a fixed width, and Settings is pinned to the
+ * bottom, separated from daily views. Every button carries an accessible name,
+ * so the rail stays legible to assistive technology without hover tooltips.
  */
-export function Sidebar({ active, expanded, onNavigate, onToggleExpanded }: SidebarProps): ReactNode {
+export function Sidebar({ active, onNavigate }: SidebarProps): ReactNode {
+  const renderItem = (item: NavItem): ReactNode => {
+    const Icon = item.icon
+    const isActive = item.key === active
+    return (
+      <button
+        key={item.key}
+        type="button"
+        className={isActive ? 'nav-item nav-item--active' : 'nav-item'}
+        aria-current={isActive ? 'page' : undefined}
+        aria-label={item.label}
+        onClick={() => onNavigate(item.key)}
+      >
+        <span className="nav-item__icon">
+          <Icon size={19} strokeWidth={1.8} />
+        </span>
+      </button>
+    )
+  }
+
   return (
-    <aside className={expanded ? 'sidebar sidebar--expanded' : 'sidebar'} aria-label="Primary navigation">
+    <aside className="sidebar" aria-label="Primary navigation">
+      <span className="sidebar__sheen" aria-hidden="true" />
       <nav className="sidebar__nav" aria-label="Sections">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon
-          const isActive = item.key === active
-          return (
-            <Tooltip key={item.key} label={expanded ? item.description : item.label} placement="bottom">
-              <button
-                type="button"
-                className={isActive ? 'nav-item nav-item--active' : 'nav-item'}
-                aria-current={isActive ? 'page' : undefined}
-                aria-label={item.label}
-                onClick={() => onNavigate(item.key)}
-              >
-                <span className="nav-item__icon">
-                  <Icon size={18} strokeWidth={1.9} />
-                </span>
-                <span className="nav-item__label">{item.label}</span>
-              </button>
-            </Tooltip>
-          )
-        })}
+        {PRIMARY_ITEMS.map(renderItem)}
       </nav>
-      <div className="sidebar__footer">
-        <Tooltip label={expanded ? 'Collapse sidebar' : 'Expand sidebar'} placement="bottom">
-          <button
-            type="button"
-            className="sidebar__collapse"
-            onClick={onToggleExpanded}
-            aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
-            aria-expanded={expanded}
-          >
-            {expanded ? <ChevronsLeft size={18} /> : <ChevronsRight size={18} />}
-            {expanded ? <span>Collapse</span> : null}
-          </button>
-        </Tooltip>
-      </div>
+      <div className="sidebar__footer">{FOOTER_ITEMS.map(renderItem)}</div>
     </aside>
   )
 }

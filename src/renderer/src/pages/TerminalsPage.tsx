@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronsDown, Copy, Eraser, Plus, Search, SquareTerminal, X } from 'lucide-react'
+import { ChevronsDown, Copy, Eraser, Minus, Plus, Search, SquareTerminal, X } from 'lucide-react'
 import type { TerminalSessionInfo } from '@shared/types'
 import { useApp } from '../state/store'
 import { TerminalSurface } from '../features/terminals/TerminalSurface'
@@ -21,6 +21,14 @@ export function TerminalsPage(): ReactNode {
   const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle')
   const [confirm, setConfirm] = useState<TerminalSessionInfo | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Terminal zoom only ever changes the font size, so zooming never scales the
+  // surrounding interface. The registry owns the value; this mirrors it.
+  const [zoom, setZoom] = useState(() => terminalRegistry.getZoom())
+  const fontSize = useMemo(() => terminalRegistry.effectiveFontSize(), [zoom, settings])
+
+  // Live grid dimensions of the active session, read straight from xterm.
+  const [dims, setDims] = useState<{ cols: number; rows: number } | null>(null)
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? null,
@@ -45,6 +53,21 @@ export function TerminalsPage(): ReactNode {
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
+
+  useEffect(() => terminalRegistry.onZoomChange(setZoom), [])
+
+  // Track the active terminal's grid size so the toolbar can report it.
+  useEffect(() => {
+    const controller = activeSessionId ? terminalRegistry.get(activeSessionId) : undefined
+    if (!controller) {
+      setDims(null)
+      return
+    }
+    const sync = (): void => setDims({ cols: controller.term.cols, rows: controller.term.rows })
+    sync()
+    const subscription = controller.term.onResize(sync)
+    return () => subscription.dispose()
+  }, [activeSessionId, sessions])
 
   const runSearch = useCallback(
     (direction: 'next' | 'previous') => {
@@ -117,9 +140,18 @@ export function TerminalsPage(): ReactNode {
               <span className="terminal-meta__item mono truncate" title={activeSession.cwd}>
                 {shortenPath(activeSession.cwd) || '~'}
               </span>
-              <span className="terminal-meta__item mono hide-sm">{activeSession.shellName}</span>
+              <span className="terminal-meta__item terminal-meta__item--secondary mono">
+                {activeSession.shellName}
+              </span>
               {activeSession.pid !== null ? (
-                <span className="terminal-meta__item mono hide-sm">pid {activeSession.pid}</span>
+                <span className="terminal-meta__item terminal-meta__item--secondary mono">
+                  pid {activeSession.pid}
+                </span>
+              ) : null}
+              {dims ? (
+                <span className="terminal-meta__item terminal-meta__item--secondary mono">
+                  {dims.cols}×{dims.rows}
+                </span>
               ) : null}
             </div>
             <div className="terminal-toolbar__actions">
@@ -172,6 +204,34 @@ export function TerminalsPage(): ReactNode {
                 >
                   <Plus size={14} />
                 </button>
+              </Tooltip>
+              <Tooltip label="Zoom the terminal — Ctrl +/−, Ctrl+0 to reset" placement="bottom">
+                <span className="terminal-zoom" role="group" aria-label="Terminal zoom">
+                  <button
+                    type="button"
+                    className="terminal-zoom__button"
+                    aria-label="Zoom terminal out"
+                    onClick={() => terminalRegistry.zoomBy(-1)}
+                  >
+                    <Minus size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="terminal-zoom__value"
+                    aria-label="Reset terminal zoom"
+                    onClick={() => terminalRegistry.resetZoom()}
+                  >
+                    {fontSize}px
+                  </button>
+                  <button
+                    type="button"
+                    className="terminal-zoom__button"
+                    aria-label="Zoom terminal in"
+                    onClick={() => terminalRegistry.zoomBy(1)}
+                  >
+                    <Plus size={13} />
+                  </button>
+                </span>
               </Tooltip>
             </div>
           </div>
