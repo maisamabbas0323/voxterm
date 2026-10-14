@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { access } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { hostname, release } from 'node:os'
-import type { ExternalProviderInfo, SystemInfo, ToolAvailability } from '@shared/types'
+import type { SystemInfo, ToolAvailability } from '@shared/types'
 import type { Settings } from '@shared/schemas'
 import { expandHome, resolveShell } from '../terminals/shell'
 import { detectToolVersion, findExecutable } from '../util/exec'
@@ -11,7 +11,6 @@ import { BUILTIN_AGENT_PROFILES } from '@shared/agents'
 export interface SystemInfoDeps {
   resolvePath: () => Promise<string>
   getSettings: () => Settings
-  getProviders: () => ExternalProviderInfo[]
 }
 
 async function toolAvailability(name: string, path: string, versionArgs: string[] = ['--version']): Promise<ToolAvailability> {
@@ -104,10 +103,6 @@ export async function buildSystemInfo(deps: SystemInfoDeps): Promise<SystemInfo>
     terminalBackend: (() => {
       const status = ptyStatus()
       return { nodePty: status.ok, ptyVersion: status.version, error: status.error }
-    })(),
-    externalDiscovery: {
-      enabled: settings.external.discoveryEnabled,
-      providers: deps.getProviders()
-    }
+    })()
   }
 }

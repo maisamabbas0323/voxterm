@@ -12,7 +12,7 @@ const directory = z.string().max(4096)
 export const appearanceSettingsSchema = z.object({
   theme: z.enum(['voxterm', 'voxterm-contrast']).default('voxterm'),
   terminalFontFamily: fontFamily.default(
-    '"JetBrains Mono", "Fira Code", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace'
+    '"JetBrains Mono", "JetBrainsMono Nerd Font", "Fira Code", monospace'
   ),
   terminalFontSize: z.number().int().min(8).max(32).default(13),
   terminalLineHeight: z.number().min(1).max(2.5).default(1.3),
@@ -37,18 +37,6 @@ export const terminalSettingsSchema = z.object({
   rightClickPaste: z.boolean().default(false),
   detectLinks: z.boolean().default(true),
   fontLigatures: z.boolean().default(false)
-})
-
-export const externalSettingsSchema = z.object({
-  discoveryEnabled: z.boolean().default(true),
-  discoveryIntervalMs: z.number().int().min(2000).max(600000).default(15000),
-  refreshOnFocus: z.boolean().default(true),
-  /** Empty array means "all available providers". */
-  enabledProviders: z.array(z.string().min(1).max(64)).max(32).default([]),
-  attachPreference: z.enum(['ask', 'reuse', 'new']).default('ask'),
-  duplicateHandling: z.enum(['warn', 'focus', 'allow']).default('warn'),
-  onClosePolicy: z.enum(['ask', 'detach', 'terminate']).default('ask'),
-  tmuxAutoRefresh: z.boolean().default(true)
 })
 
 export const voiceSettingsSchema = z.object({
@@ -109,7 +97,6 @@ export const settingsSchema = z.object({
   version: z.number().int().min(1).default(1),
   appearance: appearanceSettingsSchema.default(() => appearanceSettingsSchema.parse({})),
   terminal: terminalSettingsSchema.default(() => terminalSettingsSchema.parse({})),
-  external: externalSettingsSchema.default(() => externalSettingsSchema.parse({})),
   voice: voiceSettingsSchema.default(() => voiceSettingsSchema.parse({})),
   prompts: promptSettingsSchema.default(() => promptSettingsSchema.parse({})),
   announcements: announcementSettingsSchema.default(() => announcementSettingsSchema.parse({})),
@@ -119,7 +106,6 @@ export const settingsSchema = z.object({
 export type Settings = z.infer<typeof settingsSchema>
 export type AppearanceSettings = z.infer<typeof appearanceSettingsSchema>
 export type TerminalSettings = z.infer<typeof terminalSettingsSchema>
-export type ExternalSettings = z.infer<typeof externalSettingsSchema>
 export type VoiceSettings = z.infer<typeof voiceSettingsSchema>
 export type PromptSettings = z.infer<typeof promptSettingsSchema>
 export type AnnouncementSettings = z.infer<typeof announcementSettingsSchema>
@@ -129,7 +115,6 @@ export type PrivacySettings = z.infer<typeof privacySettingsSchema>
 export const SETTINGS_SECTIONS = [
   'appearance',
   'terminal',
-  'external',
   'voice',
   'prompts',
   'announcements',
@@ -204,7 +189,6 @@ export function parseSettings(input: unknown): { settings: Settings; issues: str
     version,
     appearance: recoverSection(appearanceSettingsSchema, DEFAULT_SETTINGS.appearance, raw.appearance),
     terminal: recoverSection(terminalSettingsSchema, DEFAULT_SETTINGS.terminal, raw.terminal),
-    external: recoverSection(externalSettingsSchema, DEFAULT_SETTINGS.external, raw.external),
     voice: recoverSection(voiceSettingsSchema, DEFAULT_SETTINGS.voice, raw.voice),
     prompts: recoverSection(promptSettingsSchema, DEFAULT_SETTINGS.prompts, raw.prompts),
     announcements: recoverSection(announcementSettingsSchema, DEFAULT_SETTINGS.announcements, raw.announcements),

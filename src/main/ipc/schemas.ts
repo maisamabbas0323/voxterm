@@ -37,10 +37,7 @@ export const terminalResizeSchema = z.object({
 
 export const terminalRenameSchema = z.object({ sessionId, title })
 
-export const terminalCloseSchema = z.object({
-  sessionId,
-  mode: z.enum(['detach', 'terminate']).default('terminate')
-})
+export const terminalCloseSchema = sessionId
 
 export const settingsSecretSchema = z.object({
   slot: z.enum(SECRET_SLOTS),
@@ -62,8 +59,6 @@ export const agentSaveSchema = z.object({
 })
 
 export const agentDeleteSchema = z.object({ id: z.string().min(1).max(80) })
-
-export const externalIdSchema = z.string().min(1).max(600)
 
 export const openExternalSchema = z
   .string()

@@ -9,8 +9,7 @@ export function registerSystemIpc(services: Services): void {
   ipcMain.handle(IPC.systemInfo, () =>
     buildSystemInfo({
       resolvePath: services.resolvePath,
-      getSettings: () => services.settings.get(),
-      getProviders: () => services.external.getProviders()
+      getSettings: () => services.settings.get()
     })
   )
 

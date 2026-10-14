@@ -6,8 +6,10 @@
 > and the extension points that later milestones plug into.
 
 Prompt 1 of 5 delivered the **Electron foundation**: a real desktop app with real
-OS terminals, honest session/external-integration semantics, validated settings
-persistence, an activity log and a hardened process model. Voice capture,
+OS terminals, honest session semantics, validated settings persistence, an
+activity log and a hardened process model. A follow-up pass removed the
+external-session integrations entirely, fixed the collapsed-sidebar icon bug,
+introduced the "V" brand mark, and made every page responsive. Voice capture,
 prompt generation and spoken announcements are **scaffolded but not runtime-active**
 (see `progress.md` for the honest status).
 
@@ -72,7 +74,6 @@ normal Kali/desktop install the sandbox works and should be left on.
 │  activity/       ActivityLog (bounded, non-sensitive events)                          │
 │  terminals/      TerminalSessionManager (owns every node-pty instance)                │
 │  agents/         AgentProfileStore + real executable detection                        │
-│  external/       ExternalSessionRegistry + providers (tmux, screen, desktop-terms)    │
 │  ipc/            One handler module per domain; every payload Zod-validated           │
 │  system/         SystemInfo aggregation (versions, PATH tools, whisper readiness)     │
 └───────────────────────────────────────────┬───────────────────────────────────────────┘
@@ -81,8 +82,9 @@ normal Kali/desktop install the sandbox works and should be left on.
 │  Preload (src/preload/index.ts)   exposes window.voxterm only — no Node primitives     │
 ├───────────────────────────────────────────────────────────────────────────────────────┤
 │  Renderer (React, sandboxed, contextIsolated)                                          │
-│    state/store.tsx        app store: settings, sessions, external, agents, activity    │
-│    features/terminals/    xterm controller registry + surfaces + tabs + external panel │
+│    state/store.tsx        app store: settings, sessions, agents, activity, nav, toasts  │
+│    features/terminals/    xterm controller registry + surfaces + tabs                  │
+│    components/            TitleBar · Sidebar · Logo · Modal · Toasts · primitives       │
 │    pages/                 Workspace · Terminals · Voice · Activity · Settings          │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -101,8 +103,8 @@ src/
   shared/     types.ts · schemas.ts · ipc.ts · api.ts · agents.ts
               (zero Node/Electron imports — safe to bundle both sides)
 tests/        Vitest unit tests
-scripts/      standalone Electron smoke checks (verify-pty, verify-env)
-resources/    packaging resources
+scripts/      standalone Electron smoke checks (verify-pty, verify-env, verify-ui)
+resources/    packaging resources (icon.svg + generated icon.png)
 ```
 
 Path aliases: `@shared/*` → `src/shared/*`, `@renderer/*` → `src/renderer/src/*`
@@ -111,14 +113,15 @@ Path aliases: `@shared/*` → `src/shared/*`, `@renderer/*` → `src/renderer/sr
 
 ## 4. Session lifecycle semantics
 
-These four operations are deliberately distinct. Do not collapse them.
+VoxTerm owns every terminal it shows; there is no external/multiplexer
+integration any more. Closing a tab and terminating the process are therefore
+the same operation.
 
-| Action                    | Effect on VoxTerm | Effect on the process |
-| ------------------------- | ----------------- | --------------------- |
-| **Close tab**             | removes the tab   | managed → terminate; external → detach (per `external.onClosePolicy` / prompt) |
-| **Terminate session**     | removes + kills   | sends signal to the process group |
-| **Detach external**       | removes the tab   | multiplexer client exits, underlying session **keeps running** |
-| **Terminate shared session** | removes + kills | `tmux kill-session` / `screen -S … -X quit` |
+| Action            | Effect on VoxTerm | Effect on the process                          |
+| ----------------- | ----------------- | ---------------------------------------------- |
+| **Close tab**     | removes the tab   | terminates the session's process group         |
+| **Terminate**     | removes + kills   | SIGTERM → (1.5 s) → SIGKILL on the process group |
+| **Shell exits**   | tab stays, marked `exited` | nothing left to signal               |
 
 Managed sessions are keyed by a stable UUID (`TerminalSessionInfo.id`), never by
 tab index. `TerminalSessionManager` buffers PTY output until the renderer calls
@@ -127,53 +130,47 @@ is lost between spawn and first paint.
 
 Termination signals the **process group** (`process.kill(-pid, …)`) because
 `forkpty` puts each child in its own session; the fallback is `pty.kill`.
-Escalation is SIGTERM → (1.5 s) → SIGKILL. `SIGHUP` is used specifically to
-detach multiplexer clients. `terminate()` never signals unrelated processes.
+Escalation is SIGTERM → (1.5 s) → SIGKILL. `terminate()` never signals unrelated
+processes.
+
+Only a real OS session can be closed, and only a running one prompts
+(`terminal.confirmBeforeTerminate`); exited tabs close immediately.
 
 Graceful app close (`index.ts`): if running sessions exist and
 `terminal.confirmBeforeAppClose` is set, the renderer gets an `app:close-requested`
 prompt; otherwise it closes immediately. On quit, `privacy.sessionCleanupOnExit`
-decides between terminating managed shells and releasing them.
+decides between terminating the shells and releasing them so they survive.
 
-## 5. External integration architecture
+## 5. Renderer UI, brand and responsiveness
 
-Every integration implements `ExternalProvider` (`src/main/external/provider.ts`):
+The renderer is a plain, tokenised React app — no component library, no chat/agent
+chrome. Structure worth knowing:
 
-```ts
-probe(ctx)            // is the underlying tool actually present?
-info()                // provider metadata + capabilities + absence reason
-discover(ctx)         // list sessions owned by the tool
-attach(externalId)    // open a real client (only where genuinely possible)
-detach(externalId)    // leave it running, drop our client
-terminate(externalId) // end the session via the tool itself
-getStatus(externalId) // authoritative current state
-```
+- **Design tokens** live in `styles/tokens.css` (colour, spacing, radii, motion,
+  z-index scale); all component styles are in the single `styles/global.css`. New
+  UI should reuse tokens and existing primitives (`Field`, `Notice`,
+  `EmptyState`, `Switch`, `StatusDot`) rather than introducing one-off values.
+- **Brand mark** — `components/Logo.tsx` renders the "V" monogram as inline SVG
+  (gradient arms, bevelled highlight, a small audio waveform in the mouth of the V
+  and a bright vertex node). It is used in the title bar and the boot splash. The
+  same geometry is the source for `resources/icon.svg`, and
+  `resources/make-icon.py` rasterises `resources/icon.png` for packaging (no SVG
+  rasteriser is required in the build).
+- **Terminal font** is a curated dropdown (`lib/fonts.ts` → `TERMINAL_FONTS`), each
+  entry a full CSS stack with a live preview. `TERMINAL_FONTS[0].stack` **must**
+  equal the `terminalFontFamily` default in `shared/schemas.ts`, otherwise a fresh
+  install shows "Custom stack".
+- **Responsive rules** (end of `global.css`) are deliberately few and meaningful:
+  ≤1020 px collapses two-up `.split` grids and hides the Workspace
+  "Detected tooling" panel; ≤860 px stacks the Settings rail into a horizontal
+  scroller, stacks page headers and drops secondary terminal metadata; ≤640 px
+  hides `.hide-sm` details and single-columns `stat-grid`/`kv`. Every page is
+  expected to stay free of horizontal overflow at all of these widths.
+- **Sidebar collapse**: in compact mode the nav labels are removed from layout
+  (`max-width: 0; overflow: hidden`) so `justify-content: center` centres the icon
+  inside the 56 px rail instead of pushing it out of the clipped area. This was a
+  real bug — verify it with `scripts/verify-ui.cjs` if you touch the sidebar CSS.
 
-States (`ExternalSessionState`) are explicit so the UI can never imply a
-connection that does not exist: `detected`, `attachable`, `connected`,
-`detached`, `exited`, `unsupported`, `attach_failed`.
-
-`ExternalSessionRegistry` isolates failures: each probe/discovery runs under a
-timeout, a hang or error in one provider never blocks or crashes the others, and
-refresh is single-flight. Composite ids are `${providerId}:${externalId}`.
-
-Shipped providers:
-
-- **tmux** — genuine integration. Attach spawns `tmux attach-session` **as the PTY
-  command** (`origin: 'external'`), so VoxTerm and an external terminal can share
-  one session. Detach kills the client PTY with SIGHUP. Terminate uses
-  `tmux kill-session`.
-- **screen** — same shape via `screen -list` / `screen -r` / `screen -S … -X quit`.
-- **desktop-terminals** — Linux `/proc` scan of terminal emulators and interactive
-  shells. **Detection only**: `capabilities.attach === false`. Linux exposes no
-  portable way to attach to another process's controlling terminal, and the UI
-  says so rather than faking it. VoxTerm's own sessions are excluded
-  (they carry `VOXTERM_SESSION_ID`).
-
-Adding a provider: implement `ExternalProvider` (extend `BaseExternalProvider` for
-the default unsupported responses), register it in `index.ts`, and it appears in
-`getProviders()`/the External panel automatically. Never advertise a capability
-you cannot honour.
 
 ## 6. Coding agents
 
@@ -244,7 +241,14 @@ prefer adding one more narrow method to the preload bridge over widening the API
 - Deep-black, premium, *human-designed*. Charcoal sidebar, restrained accent,
   design tokens in `styles/tokens.css`; component styles in `styles/global.css`.
 - **SVG icons only** (`lucide-react`), no emojis, no robot avatars, no AI badges,
-  no chatbot chrome.
+  no chatbot chrome. Labels are plain product language ("Google API key", not
+  "Google AI"), and provider wording is reserved for the *prompt/transcription*
+  providers that genuinely exist.
+- **Every page is responsive.** Prefer `.page__header`, `.split`, `.stat-grid`,
+  `.chip-row` and the utilities (`.row`, `.col`, `.grow`, `.truncate`, `.hide-sm`)
+  over bespoke layout CSS; the breakpoints live in one block at the end of
+  `global.css`. Two-up layouts collapse, the Settings rail becomes a horizontal
+  scroller and the Workspace tooling panel is dropped on narrow windows.
 - **No fake buttons, dead controls or placeholder session data.** If something is
   not wired up, disable it and label it honestly (see the Voice page notice).
 - No horizontal overflow; the window is frameless with a custom title bar
@@ -283,16 +287,24 @@ prefer adding one more narrow method to the preload bridge over widening the API
 - **Agent adapters:** flip `AgentCapabilities` per agent and add adapters in the
   `agents/` module. Launch stays "type it into the shell" — adapters only add
   prompt/event handling on top.
-- **More external providers:** implement `ExternalProvider` and register it. Be
-  honest about capabilities.
 
 ## 12. Verifying a change
 
 ```bash
 npm run typecheck && npm run lint && npm test && npm run build
+npm run verify:ui        # needs a display: xvfb-run -a npm run verify:ui
 ```
 
-All four must pass. Lint currently reports **0 errors** (3 benign
+All four static checks must pass. Lint currently reports **0 errors** (3 benign
 `react-refresh/only-export-components` warnings for files that export a component
-plus a helper). See `progress.md` for the latest verified results and known
-limitations.
+plus a helper).
+
+`scripts/verify-ui.cjs` is the runtime check. It boots the **built** app with the
+real main process and IPC, attaches over the Chrome DevTools Protocol and asserts
+what unit tests cannot: the app leaves the boot screen, every collapsed-sidebar
+nav icon is still visible and centred, the "V" logo renders, no external-session
+wording or "AI" labels remain, the terminal font is a dropdown whose stored value
+resolves to a listed family, and **no page overflows horizontally at either
+desktop width or 560 px** (where the Detected-tooling panel must be hidden). It
+exits non-zero on any failure. See `progress.md` for the latest verified results
+and known limitations.

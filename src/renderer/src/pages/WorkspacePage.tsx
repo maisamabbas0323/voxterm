@@ -2,8 +2,6 @@ import { useMemo, type ReactNode } from 'react'
 import {
   Activity as ActivityIcon,
   Boxes,
-  CircleCheck,
-  CircleDashed,
   Cpu,
   Play,
   Plus,
@@ -13,7 +11,7 @@ import {
 } from 'lucide-react'
 import type { ActivityEvent, AgentProfileStatus } from '@shared/types'
 import { useApp } from '../state/store'
-import { EmptyState, Pill } from '../components/primitives'
+import { EmptyState } from '../components/primitives'
 import { Tooltip } from '../components/Tooltip'
 import { agentIcon } from '../lib/icons'
 import { formatRelative, shortenPath } from '../lib/format'
@@ -28,7 +26,7 @@ function levelTone(level: ActivityEvent['level']): 'success' | 'warning' | 'dang
 
 export function WorkspacePage(): ReactNode {
   const { state, actions } = useApp()
-  const { sessions, external, agents, system, activity } = state
+  const { sessions, agents, system, activity } = state
 
   const running = useMemo(() => sessions.filter((session) => session.status === 'running').length, [sessions])
   const availableAgents = useMemo(() => agents.filter((agent) => agent.available).length, [agents])
@@ -47,18 +45,25 @@ export function WorkspacePage(): ReactNode {
     actions.toast(`Launching ${agent.name} in a new shell.`, 'info')
   }
 
+  const refresh = (): void => {
+    void actions.refreshSystem()
+    void actions.refreshAgents()
+    void actions.refreshSessions()
+  }
+
   return (
     <div className="page">
       <header className="page__header">
         <div>
           <h1 className="page__title">Workspace</h1>
-          <p className="page__subtitle">Live overview of terminals, integrations and coding agents.</p>
+          <p className="page__subtitle">A live overview of your terminals, coding agents and system.</p>
         </div>
         <div className="page__actions">
-          <button className="btn" onClick={() => void actions.refreshExternal()}>
-            <RefreshCw size={14} className={state.externalRefreshing ? 'spin' : undefined} />
-            Rescan
-          </button>
+          <Tooltip label="Re-read system information" placement="bottom">
+            <button className="btn btn--icon" aria-label="Refresh workspace" onClick={refresh}>
+              <RefreshCw size={14} />
+            </button>
+          </Tooltip>
           <button className="btn btn--primary" onClick={() => void actions.createTerminal()}>
             <Plus size={15} />
             New terminal
@@ -71,35 +76,29 @@ export function WorkspacePage(): ReactNode {
           <div className="stat">
             <span className="stat__label">Running sessions</span>
             <span className="stat__value">{running}</span>
-            <span className="stat__meta">{sessions.length} total tabs</span>
-          </div>
-          <div className="stat">
-            <span className="stat__label">External sessions</span>
-            <span className="stat__value">{external.length}</span>
             <span className="stat__meta">
-              {external.filter((session) => session.state === 'connected').length} connected
+              {sessions.length === 0 ? 'No tabs open' : `${sessions.length} tab${sessions.length === 1 ? '' : 's'} total`}
             </span>
           </div>
           <div className="stat">
             <span className="stat__label">Coding agents</span>
             <span className="stat__value">{availableAgents}</span>
-            <span className="stat__meta">{agents.length} configured profiles</span>
+            <span className="stat__meta">of {agents.length} profiles found on PATH</span>
           </div>
           <div className="stat">
             <span className="stat__label">Terminal backend</span>
             <span className="stat__value">{system?.terminalBackend.nodePty ? 'Ready' : 'Unavailable'}</span>
-            <span className="stat__meta">
-              node-pty {system?.terminalBackend.ptyVersion ?? '—'}
-            </span>
+            <span className="stat__meta">node-pty {system?.terminalBackend.ptyVersion ?? '—'}</span>
           </div>
         </div>
 
         <div className="panel">
           <div className="panel__header">
-            <span className="panel__title">Coding agents</span>
-            <span className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
-              Launched as ordinary CLI programs inside a real shell
-            </span>
+            <div className="col">
+              <span className="panel__title">Coding agents</span>
+              <span className="panel__caption">Launched as ordinary CLI programs inside a real shell.</span>
+            </div>
+            <Users size={15} className="muted" />
           </div>
           {agents.length === 0 ? (
             <div className="panel__body">
@@ -118,19 +117,14 @@ export function WorkspacePage(): ReactNode {
                     </span>
                     <div className="grow">
                       <div className="row" style={{ gap: 'var(--space-2)' }}>
+                        <span
+                          className={agent.available ? 'dot dot--running' : 'dot dot--exited'}
+                          aria-hidden="true"
+                        />
                         <span className="list__primary">{agent.name}</span>
-                        {agent.available ? (
-                          <Pill tone="success">
-                            <CircleCheck size={11} />
-                            available
-                          </Pill>
-                        ) : (
-                          <Pill tone="neutral">
-                            <CircleDashed size={11} />
-                            not found
-                          </Pill>
-                        )}
-                        {agent.kind === 'custom' ? <Pill>custom</Pill> : null}
+                        {!agent.available ? (
+                          <span className="list__tag">not on PATH</span>
+                        ) : null}
                       </div>
                       <div className="list__secondary mono">
                         {agent.command}
@@ -159,8 +153,8 @@ export function WorkspacePage(): ReactNode {
           )}
         </div>
 
-        <div className="row" style={{ alignItems: 'stretch', gap: 'var(--space-4)' }}>
-          <div className="panel grow">
+        <div className="split">
+          <div className="panel">
             <div className="panel__header">
               <span className="panel__title">System</span>
               <Cpu size={15} className="muted" />
@@ -178,17 +172,12 @@ export function WorkspacePage(): ReactNode {
                   <span className="kv__value">{system.node}</span>
                   <span className="kv__key">Platform</span>
                   <span className="kv__value">
-                    {system.platform} · {system.arch} · {system.osRelease}
+                    {system.platform} · {system.arch}
                   </span>
                   <span className="kv__key">Host</span>
                   <span className="kv__value">{system.hostname}</span>
                   <span className="kv__key">Default shell</span>
                   <span className="kv__value">{shortenPath(system.defaultShell) || system.defaultShell}</span>
-                  <span className="kv__key">tmux / screen</span>
-                  <span className="kv__value">
-                    {system.tmux.available ? system.tmux.version ?? 'available' : 'not installed'} ·{' '}
-                    {system.screen.available ? system.screen.version ?? 'available' : 'not installed'}
-                  </span>
                 </div>
               ) : (
                 <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
@@ -198,7 +187,7 @@ export function WorkspacePage(): ReactNode {
             </div>
           </div>
 
-          <div className="panel grow">
+          <div className="panel">
             <div className="panel__header">
               <span className="panel__title">Recent activity</span>
               <Tooltip label="Open activity log" placement="bottom">
@@ -221,9 +210,10 @@ export function WorkspacePage(): ReactNode {
               <ul className="list">
                 {recentActivity.map((event) => (
                   <li className="list__row" key={event.id}>
-                    <Pill tone={levelTone(event.level)}>{event.category}</Pill>
+                    <span className={`list__level list__level--${levelTone(event.level)}`} aria-hidden="true" />
                     <div className="grow">
                       <div className="list__primary truncate">{event.message}</div>
+                      <div className="list__secondary">{event.category}</div>
                     </div>
                     <span className="list__time">{formatRelative(event.timestamp)}</span>
                   </li>
@@ -233,9 +223,12 @@ export function WorkspacePage(): ReactNode {
           </div>
         </div>
 
-        <div className="panel">
+        <div className="panel workspace__tooling">
           <div className="panel__header">
-            <span className="panel__title">Detected tooling</span>
+            <div className="col">
+              <span className="panel__title">Detected tooling</span>
+              <span className="panel__caption">Programs found on your PATH that VoxTerm can use.</span>
+            </div>
             <Boxes size={15} className="muted" />
           </div>
           <div className="panel__body">
@@ -264,7 +257,7 @@ export function WorkspacePage(): ReactNode {
           <EmptyState
             icon={<Cpu size={24} />}
             title="Loading workspace"
-            text="Reading system information and discovering available tooling."
+            text="Reading system information and detecting available tooling."
           />
         ) : null}
       </div>

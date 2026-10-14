@@ -1,18 +1,12 @@
 import { app, BrowserWindow, session as electronSession } from 'electron'
 import { join } from 'node:path'
 import { IPC_EVENTS } from '@shared/ipc'
-import type { ExternalSessionInfo } from '@shared/types'
 import { SettingsStore } from './settings/store'
 import { ActivityLog } from './activity/log'
 import { TerminalSessionManager } from './terminals/SessionManager'
 import { AgentProfileStore } from './agents/store'
-import { ExternalSessionRegistry } from './external/registry'
-import { TmuxExternalProvider } from './external/providers/tmux'
-import { ScreenExternalProvider } from './external/providers/screen'
-import { DesktopTerminalsExternalProvider } from './external/providers/desktopTerminals'
-import type { ProviderContext } from './external/provider'
 import { Logger } from './util/logger'
-import { execFileSafe, resetUserPathCache, resolveUserPath } from './util/exec'
+import { resetUserPathCache, resolveUserPath } from './util/exec'
 import { createMainWindow, currentCsp } from './window'
 import { registerIpcHandlers, wireMainEvents } from './ipc'
 import { broadcast, type Services } from './services'
@@ -30,8 +24,6 @@ let shuttingDown = false
 let cleanedUp = false
 let closeResponded = false
 let closePromptVisible = false
-
-const knownExternalIds = new Set<string>()
 
 function countRunningSessions(): number {
   return services ? services.sessions.list().filter((item) => item.status === 'running').length : 0
@@ -64,20 +56,13 @@ function respondToClose(confirm: boolean): void {
 
 async function shutdown(): Promise<void> {
   if (!services) return
-  services.external.stop()
   disposeEvents?.()
   disposeEvents = null
 
   const policy = services.settings.get().privacy.sessionCleanupOnExit
-  const sessions = services.sessions.list()
   if (policy === 'keep-managed') {
-    // Best effort: detach external clients so multiplexer sessions persist,
-    // and leave managed shells untouched.
-    for (const item of sessions) {
-      if (item.origin === 'external') {
-        await services.sessions.terminate(item.id, 'SIGHUP').catch(() => undefined)
-      }
-    }
+    // The user explicitly asked to keep shells running after VoxTerm exits, so
+    // drop our references without signalling the processes.
     services.sessions.releaseAll()
   } else {
     await services.sessions.terminateAll('SIGHUP').catch(() => undefined)
@@ -138,36 +123,6 @@ function bootstrap(): void {
   const agents = new AgentProfileStore(logger)
   agents.load()
 
-  const providerContext: ProviderContext = {
-    execFileSafe,
-    logger,
-    resolvePath: resolveUserPath,
-    sessions,
-    getSettings: () => settings.get()
-  }
-
-  const external = new ExternalSessionRegistry(
-    [new TmuxExternalProvider(), new ScreenExternalProvider(), new DesktopTerminalsExternalProvider()],
-    {
-      context: providerContext,
-      getSettings: () => settings.get(),
-      onSessionsChanged: (list) => {
-        broadcast(IPC_EVENTS.externalChanged, list)
-        recordNewlyDiscovered(activity, list)
-      },
-      onProviderError: (providerId, message) => {
-        logger.warn('external', `Provider "${providerId}" error: ${message}`)
-        activity.record({
-          category: 'error',
-          type: 'external.provider-error',
-          message: `External provider "${providerId}" failed: ${message}`,
-          level: 'error',
-          details: { providerId }
-        })
-      }
-    }
-  )
-
   mainWindow = createMainWindow({
     onMaximizedChanged: (maximized) => broadcast(IPC_EVENTS.windowMaximizedChanged, maximized),
     onCloseRequested: (event) => {
@@ -190,7 +145,6 @@ function bootstrap(): void {
     activity,
     sessions,
     agents,
-    external,
     logger,
     resolvePath: resolveUserPath,
     getWindow,
@@ -206,33 +160,11 @@ function bootstrap(): void {
     logger.configure({ enabled: next.privacy.diagnosticLogging, redact: next.privacy.redactLogs })
     activity.setRetention(next.privacy.activityRetention)
     resetUserPathCache()
-    external.configure()
   })
-
-  external.start()
 
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-}
-
-function recordNewlyDiscovered(activity: ActivityLog, list: ExternalSessionInfo[]): void {
-  const current = new Set(list.map((item) => item.id))
-  for (const item of list) {
-    if (!knownExternalIds.has(item.id)) {
-      knownExternalIds.add(item.id)
-      activity.record({
-        category: 'external',
-        type: 'external.discovered',
-        message: `Discovered external session "${item.name}" (${item.providerId})`,
-        level: 'info',
-        details: { sessionId: item.id, providerId: item.providerId, state: item.state }
-      })
-    }
-  }
-  for (const id of [...knownExternalIds]) {
-    if (!current.has(id)) knownExternalIds.delete(id)
-  }
 }
 
 const gotLock = app.requestSingleInstanceLock()

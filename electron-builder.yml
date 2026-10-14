@@ -20,7 +20,8 @@ linux:
     - deb
   category: Development
   synopsis: Voice-ready terminal workspace for Linux
-  description: VoxTerm combines real operating-system terminals, coding-agent sessions, external terminal integrations, and voice-driven developer workflows.
+  description: VoxTerm is a premium desktop workspace for real operating-system terminals, coding-agent sessions, and voice-driven developer workflows.
   maintainer: VoxTerm
+  icon: resources/icon.png
 
 npmRebuild: true

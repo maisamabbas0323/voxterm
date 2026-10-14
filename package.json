@@ -19,6 +19,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:ui": "node scripts/verify-ui.cjs",
     "package": "npm run build && electron-builder --linux",
     "package:dir": "npm run build && electron-builder --linux --dir"
   },

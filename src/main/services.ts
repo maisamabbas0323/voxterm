@@ -3,7 +3,6 @@ import type { SettingsStore } from './settings/store'
 import type { ActivityLog } from './activity/log'
 import type { TerminalSessionManager } from './terminals/SessionManager'
 import type { AgentProfileStore } from './agents/store'
-import type { ExternalSessionRegistry } from './external/registry'
 import type { Logger } from './util/logger'
 
 /** Dependency container shared by every IPC handler registration. */
@@ -12,7 +11,6 @@ export interface Services {
   activity: ActivityLog
   sessions: TerminalSessionManager
   agents: AgentProfileStore
-  external: ExternalSessionRegistry
   logger: Logger
   resolvePath: () => Promise<string>
   getWindow: () => BrowserWindow | null

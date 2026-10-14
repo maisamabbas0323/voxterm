@@ -36,22 +36,12 @@ export const IPC = {
   terminalResize: 'terminal:resize',
   terminalRename: 'terminal:rename',
   terminalClose: 'terminal:close',
-  terminalTerminate: 'terminal:terminate',
   terminalSnapshot: 'terminal:snapshot',
 
   // Agents
   agentsList: 'agents:list',
   agentsSave: 'agents:save',
   agentsDelete: 'agents:delete',
-
-  // External sessions
-  externalListProviders: 'external:list-providers',
-  externalList: 'external:list',
-  externalRefresh: 'external:refresh',
-  externalAttach: 'external:attach',
-  externalDetach: 'external:detach',
-  externalTerminate: 'external:terminate',
-  externalStatus: 'external:status',
 
   // Activity
   activityList: 'activity:list',
@@ -68,7 +58,6 @@ export const IPC_EVENTS = {
   terminalTitle: 'terminal:title',
   terminalSessionChanged: 'terminal:session-changed',
   terminalListChanged: 'terminal:list-changed',
-  externalChanged: 'external:changed',
   activityEvent: 'activity:event',
   settingsChanged: 'settings:changed',
   windowMaximizedChanged: 'window:maximized-changed',

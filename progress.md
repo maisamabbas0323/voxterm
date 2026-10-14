@@ -1,86 +1,104 @@
 # VoxTerm — Progress
 
-Prompt 1 of 5: Electron foundation, black human-designed UI, real OS terminals,
-tab/session management, settings persistence, external-session discovery
-architecture, activity log and Electron security.
+A premium, voice-ready terminal workspace for Linux (Electron + React + TypeScript).
 
 **Status: complete and verified.** The app is a real, working Electron application
 — not a mockup. It boots, creates genuine `node-pty` shells, persists validated
-settings, discovers external sessions and shuts down cleanly. Voice, prompt
-generation and spoken announcements are intentionally scaffolded-only in this
-milestone (honest limitations below).
+settings, mounts real xterm.js terminals and shuts down cleanly. Voice, prompt
+generation and spoken announcements remain intentionally scaffolded-only (honest
+limitations below).
 
 ---
 
-## What is implemented
+## Milestone 1 — Electron foundation
 
-### Electron foundation & lifecycle
-- Single-instance lock, `whenReady` bootstrap, `window-all-closed` quit.
-- Graceful close flow: prompts before quitting when sessions are running (if
-  `terminal.confirmBeforeAppClose`), otherwise closes immediately.
-- Shutdown honours `privacy.sessionCleanupOnExit`: `terminate-managed` kills
-  managed shells, `keep-managed` detaches external clients and releases managed
-  shells so they survive.
-- Frameless window with custom title bar and IPC-driven window controls
-  (min 880×560, default 1320×860).
+- Single-instance lock, `whenReady` bootstrap, graceful close flow with a
+  renderer-driven confirm prompt when sessions are running.
+- Frameless window with a custom title bar and IPC window controls (min 880×560).
+- `TerminalSessionManager` (main) owns every `node-pty` instance; one real shell is
+  auto-created on first launch. Stable UUID session ids, output buffering until the
+  renderer subscribes, xterm instances cached by session id across StrictMode
+  remounts.
+- Coding agents are ordinary CLI programs typed into a real shell, with honest
+  executable detection on the user's login-shell PATH.
+- One Zod settings schema with section-scoped recovery, atomic `0600` writes and a
+  separate secrets file (presence only over IPC).
+- Bounded activity log (non-sensitive metadata only) with a filterable page.
+- Hardened process model: `contextIsolation`, `nodeIntegration:false`,
+  `sandbox:true`, a narrow typed preload bridge, Zod-validated IPC, CSP via
+  `onHeadersReceived`, denied permissions/navigation, `execFile` only.
 
-### Real terminals
-- `TerminalSessionManager` (main) owns every `node-pty` instance; one real
-  terminal (zsh on this machine) is auto-created on first launch.
-- Stable UUID session ids (never tab index); switching tabs never restarts a
-  shell.
-- Output buffering until the renderer subscribes, then live streaming — no lost
-  output between spawn and first paint.
-- xterm.js instances cached by session id across React StrictMode remounts;
-  scrollback preserved until explicit dispose.
-- Tabs: create, close (with confirm), rename, reorder-free stable identity, cycle
-  shortcuts, `Ctrl+1..9` jump, find (search addon), copy/paste via main clipboard.
-- Real shell resolution + login-shell PATH discovery so agents are visible.
-- Correct signal handling: process-group kill, SIGTERM → SIGKILL escalation,
-  SIGHUP for detaching multiplexer clients.
+## Milestone 1.1 — Refactor pass (this change)
 
-### External session integration
-- Provider interface (`probe/info/discover/attach/detach/terminate/getStatus`) with
-  explicit capabilities and honest states.
-- **tmux**: genuine discovery, attach (real `tmux attach-session` as the PTY),
-  detach (client SIGHUP, session persists), terminate (`tmux kill-session`).
-- **screen**: discovery + attach/detach/terminate via `screen`.
-- **desktop-terminals**: Linux `/proc` detection of terminal emulators and shells
-  — **detection only**, since Linux has no portable attach API. UI explains why,
-  and never shows detected windows as connected.
-- Registry isolates provider failures with timeouts and single-flight refresh;
-  periodic discovery + on-demand "Rescan".
+### External terminal sessions removed entirely
+The "external sessions" feature (tmux/screen attach, desktop-terminal discovery)
+was removed at the user's request. This was a **comprehensive** removal, not a UI
+hide — no dead code was left behind:
 
-### Coding agents
-- Built-in profiles (opencode, claude, codex, gemini, aider) + custom profiles.
-- Real availability detection: resolves the executable on the login-shell PATH and
-  reads its `--version` (cached 30 s).
-- Launch = create a real terminal and type the command into the shell
-  (`terminalRegistry.queueCommand`); the user sees exactly what runs.
-- Hardened validation of launch commands, args and env keys; built-ins immutable.
+- Deleted `src/main/external/**` (registry, base provider, tmux/screen/
+  desktop-terminals providers), `src/main/ipc/external.ts`,
+  `src/renderer/src/features/terminals/ExternalPanel.tsx` and
+  `tests/providers.test.ts`.
+- Removed the external surface from `shared/types.ts`, `schemas.ts`, `ipc.ts` and
+  `api.ts`; dropped the preload bridge for it; removed the `ExternalProvider`
+  context and discovery bookkeeping from `src/main/index.ts`.
+- `TerminalSessionManager` sessions no longer carry an `origin`/`providerId`/
+  `externalSessionId`; `CreateSessionContext` is now just `{ cwd }`.
+- `ActivityCategory` dropped `'external'`; `SystemInfo` dropped
+  `externalDiscovery`; the Settings `external` section was removed from both the
+  schema and `SETTINGS_SECTIONS`.
+- **Managed-only close semantics.** Closing a tab now *is* terminating its
+  process group. `CloseSessionMode`/the `terminate` channel were removed and
+  `CloseSessionResult` simplified to `{ id, terminated, message? }`.
+- tmux/screen **detection** is retained for the informational "Detected tooling"
+  panel on the Workspace page — detection is honest, and nothing pretends to attach.
+- `openExternal` (opening a URL) is unrelated to external sessions and is unchanged.
 
-### Settings, secrets, activity
-- One Zod schema with defaults everywhere; section-scoped recovery from invalid
-  files; corrupted files backed up, never deleted.
-- Atomic `0600` writes in a `0700` directory.
-- Secrets in a separate owner-only file; only presence crosses IPC.
-- Bounded activity log (default 500, max 5000) with non-sensitive metadata only;
-  Activity page with filters and clear.
+Legacy settings files that still contain an `external` key load fine: the Zod
+schema strips unknown keys, so the section disappears on the next write.
 
-### UI
-- Deep-black premium theme with design tokens; charcoal sidebar; lucide SVG icons
-  only; no emojis, robot avatars, AI badges or chatbot chrome.
-- Pages: Workspace (stats, agents, system, recent activity, tooling), Terminals
-  (tabs + toolbar + find + external panel), Voice (honest "not active" notice +
-  config), Activity, Settings (all sections incl. credential slots).
-- No horizontal overflow; disabled controls are labelled, not fake.
+### Sidebar-collapse icon bug fixed
+Root cause: in compact mode the nav label used `opacity: 0` while still occupying
+its full text width, so `justify-content: center` pushed the icon outside the
+clipped rail. Fixed by removing the label from layout in compact mode
+(`max-width: 0; overflow: hidden`) and zeroing the row gap. Verified at runtime
+(all five icons visible, inside the 56 px rail and centred).
 
-### Security
-- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
-- Narrow typed preload bridge; no Node/Electron primitives in the renderer.
-- Every IPC payload Zod-validated; all permission requests denied; CSP via
-  `onHeadersReceived`; navigation/webview/window-open hardened; clipboard via IPC;
-  external URLs restricted to `http(s)`; `execFile` only (never `shell: true`).
+### Brand mark
+- New `components/Logo.tsx`: a bold gradient "V" monogram with bevelled arms, a
+  soft glow, a small audio waveform resting in the mouth of the V and a bright
+  vertex node. Inline SVG only, with `useId()`-derived gradient ids so multiple
+  instances never collide. Used in the title bar and the boot splash.
+- `resources/icon.svg` mirrors the geometry; `resources/make-icon.py` rasterises
+  `resources/icon.png` (512²) for packaging using numpy + PIL, so the build needs
+  no SVG rasteriser. `electron-builder.yml` points Linux packaging at it.
+
+### UI/UX pass across every page
+- **Workspace** — three stat cards, an agents list using status dots (no badges),
+  side-by-side System + Recent-activity panels, and a Detected-tooling panel with
+  chips that drops away on narrow windows.
+- **Terminals** — removed the external panel; added a real toolbar (status dot,
+  title, cwd, shell, pid, find/scroll/clear/copy-cwd/new-in-cwd), a proper empty
+  state and an "exited" notice. Tabs got a cleaner look, a context menu and
+  middle-click close.
+- **Voice** — honest configuration view plus local-transcription readiness and
+  planned-flow steps; explicitly states the pipeline is not active yet.
+- **Activity** — chip filters (no more external category) plus a search box.
+- **Settings** — external section removed; **terminal font family is now a
+  dropdown** (`lib/fonts.ts`, 16 curated stacks) with a live preview instead of a
+  free-text field; "Google AI API key" corrected to "Google API key"; the
+  "saved automatically" pill replaced with an honest caption.
+- Global responsive rules: ≤1020 px collapses two-up `.split` grids and hides the
+  Workspace tooling panel; ≤860 px stacks the Settings rail into a horizontal
+  scroller and page headers; ≤640 px hides `.hide-sm` details and single-columns
+  `stat-grid`/`kv`. No horizontal overflow at any of these widths.
+- Removed the now-unused `Pill` primitive and its CSS instead of leaving dead code.
+
+### Verification tooling
+- Added `scripts/verify-ui.cjs` (+ `npm run verify:ui`): boots the built app with
+  the real main process and IPC, attaches over the Chrome DevTools Protocol and
+  asserts runtime-only properties (see below). No new dependencies — it uses
+  Node 22's global `fetch`/`WebSocket`.
 
 ---
 
@@ -88,34 +106,40 @@ milestone (honest limitations below).
 
 All commands run from the repo root on Kali (Linux), Oct 2026.
 
-| Check                | Command             | Result                                            |
-| -------------------- | ------------------- | ------------------------------------------------- |
-| Types                | `npm run typecheck` | PASS (node + web, no errors)                      |
-| Lint                 | `npm run lint`      | PASS — 0 errors, 3 `react-refresh` warnings        |
-| Unit tests           | `npm test`          | PASS — 24 tests / 4 files                         |
-| Production build     | `npm run build`     | PASS — `out/{main,preload,renderer}` produced     |
-| PTY under Electron   | `scripts/verify-pty.cjs` | PASS (see below)                             |
-| Env discovery        | `scripts/verify-env.cjs` | PASS                                        |
+| Check             | Command                  | Result                                        |
+| ----------------- | ------------------------ | --------------------------------------------- |
+| Types             | `npm run typecheck`      | PASS (node + web, no errors)                  |
+| Lint              | `npm run lint`           | PASS — 0 errors, 3 `react-refresh` warnings    |
+| Unit tests        | `npm test`               | PASS — 19 tests / 3 files                     |
+| Production build  | `npm run build`          | PASS — `out/{main,preload,renderer}` produced |
+| Runtime UI        | `npm run verify:ui`      | PASS — 25/25 checks                           |
+| PTY under Electron| `scripts/verify-pty.cjs` | PASS                                          |
+| Env discovery     | `scripts/verify-env.cjs` | PASS                                          |
 
 Test files: `tests/settings.test.ts` (schema + section recovery),
 `tests/agents.test.ts` (launch-command/arg/env validation),
-`tests/ipc-schemas.test.ts` (IPC payload validation & clamping),
-`tests/providers.test.ts` (tmux/screen parsing).
+`tests/ipc-schemas.test.ts` (IPC payload validation & clamping).
 
 The only lint output is three benign `react-refresh/only-export-components`
 warnings (files that intentionally export a component plus a helper) with **0
 errors**.
 
-### Runtime verification (headless under Xvfb)
-- App boots and the React renderer runs.
-- A real `zsh` process is spawned as a child of the Electron main process,
-  confirming genuine `node-pty` integration inside the Electron ABI.
-- `~/.config/voxterm/settings.json` is written with validated defaults.
-- `~/.config/voxterm/activity.json` records `app.started`, two `terminal.created`
-  events (zsh, cwd `/home/maisamabbas`) and `external.discovered` events.
-- Genuine tmux discovery confirmed against a real `tmux:voxterm_probe` session
-  (state `attachable`); desktop-terminals discovery returned 14 detected sessions.
-- All test processes (electron, Xvfb, tmux probe) were cleaned up afterwards.
+### Runtime verification (`scripts/verify-ui.cjs`, headless under Xvfb)
+
+25/25 checks pass against the **built** app with a fresh user-data directory:
+
+- app boots past the loading screen; **no renderer console errors**;
+- sidebar is compact (56 px) and all five nav icons stay **visible, inside the
+  rail and centred** — the collapsed-icon bug is fixed;
+- the branded "V" logo renders in the title bar;
+- every nav item is clickable and no page shows external-session wording, and
+  Settings has no "External sessions" section and no "AI" label tags;
+- the terminal font is a dropdown (16 curated families) with a preview, and a
+  fresh install's stored value resolves to a listed family ("JetBrains Mono"), not
+  "Custom stack";
+- **no horizontal overflow** on any page at desktop width *or* at 560 px;
+- the Detected-tooling panel is hidden at 560 px and returns at desktop width;
+- the Terminals page mounts a real xterm surface (real `node-pty` shell).
 
 `scripts/verify-pty.cjs` spawns a real PTY shell under Electron and waits for the
 `VOXTERM_PTY_OK:` marker; `scripts/verify-env.cjs` prints a JSON snapshot of
@@ -127,27 +151,30 @@ versions, shells, tmux/screen and coding-agent availability.
 
 1. **Voice is not runtime-active.** No microphone capture, no transcription, no
    announcement playback. The settings, `SystemInfo.whisper` readiness probes and
-   the Voice page exist so the next milestone can drop a real pipeline in.
-   The Voice page states this explicitly — it does not pretend to work.
+   the Voice page exist so the next milestone can drop a real pipeline in. The
+   Voice page states this explicitly — it does not pretend to work.
 2. **Prompt generation is not runtime-active.** `prompts` settings (provider
    priority, `localOnly`) are persisted and validated but nothing consumes them yet.
-3. **desktop-terminals is detection-only.** Attaching to another process's
-   controlling terminal has no portable Linux API. tmux/screen are the only
-   genuinely attachable external sources. The UI labels detected-only entries.
+3. **"Detected tooling" is informational only.** tmux/screen presence is reported
+   on the Workspace page; VoxTerm no longer attaches to or manages anything outside
+   its own sessions.
 4. **Sandbox caveat in this environment.** The app was launched here under Xvfb
    with `--no-sandbox` (`VOXTERM_DISABLE_CHROMIUM_SANDBOX=1`) because the Chromium
    SUID sandbox is not configured in this container. `webPreferences.sandbox:true`
-   is retained, and on a normal desktop install the Chromium sandbox should be
-   left enabled; this path has not been re-tested under a standard display session.
-5. **`npm audit` reports 8 moderate transitive vulnerabilities** (tooling chain,
+   is retained, and on a normal desktop install the Chromium sandbox should be left
+   enabled; this path has not been re-tested under a standard display session.
+5. **Font catalogue is a display list.** The 16 families are CSS stacks, not
+   bundled fonts; xterm falls back gracefully when a family is not installed. A
+   settings value that matches no entry is shown as "Custom stack".
+6. **`npm audit` reports 8 moderate transitive vulnerabilities** (tooling chain,
    likely electron-builder). Not addressed in this milestone; no runtime-facing
    advisories were identified.
-6. **Renderer bundle is ~1.4 MB** (zod + xterm + react). Fine for a desktop app;
+7. **Renderer bundle is ~1.4 MB** (zod + xterm + react). Fine for a desktop app;
    flagged in case startup regresses later.
-7. **Packaging (`npm run package`) was not executed** in this environment (it
+8. **Packaging (`npm run package`) was not executed** in this environment (it
    produces AppImage/deb via electron-builder and requires additional system
-   tooling). The config is in place (`electron-builder.yml`), and the build step it
-   depends on passes.
+   tooling). The config is in place (`electron-builder.yml`, with the new icon),
+   and the build step it depends on passes.
 
 ## Note on dependencies
 
@@ -162,6 +189,6 @@ userData directory (`~/.config/voxterm`) is not part of the repo.
   send to the active session; announcement playback for configured event categories.
 - Prompt-generation pipeline honouring `localOnly` and provider priority.
 - Per-agent adapters enabling `promptInjection` / `structuredEvents`.
-- Optional: additional external providers, and a packaging/release pass.
+- Optional: a packaging/release pass.
 
 See `agent.md` for architecture, the security model and extension points.

@@ -11,8 +11,6 @@ import {
 import type {
   ActivityEvent,
   AgentProfileStatus,
-  ExternalProviderInfo,
-  ExternalSessionInfo,
   SystemInfo,
   TerminalSessionInfo
 } from '@shared/types'
@@ -29,9 +27,6 @@ interface State {
   secrets: SecretsStatus
   sessions: TerminalSessionInfo[]
   activeSessionId: string | null
-  external: ExternalSessionInfo[]
-  externalProviders: ExternalProviderInfo[]
-  externalRefreshing: boolean
   activity: ActivityEvent[]
   system: SystemInfo | null
   agents: AgentProfileStatus[]
@@ -48,8 +43,6 @@ type Action =
         settings: Settings
         secrets: SecretsStatus
         sessions: TerminalSessionInfo[]
-        external: ExternalSessionInfo[]
-        providers: ExternalProviderInfo[]
         activity: ActivityEvent[]
         system: SystemInfo
         agents: AgentProfileStatus[]
@@ -61,9 +54,6 @@ type Action =
   | { type: 'sessions'; sessions: TerminalSessionInfo[] }
   | { type: 'upsert-session'; session: TerminalSessionInfo }
   | { type: 'active'; id: string | null }
-  | { type: 'external'; sessions: ExternalSessionInfo[] }
-  | { type: 'providers'; providers: ExternalProviderInfo[] }
-  | { type: 'external-refreshing'; value: boolean }
   | { type: 'activity'; events: ActivityEvent[] }
   | { type: 'activity-add'; event: ActivityEvent }
   | { type: 'system'; system: SystemInfo }
@@ -81,9 +71,6 @@ const initialState: State = {
   secrets: { openrouter: false, google: false, elevenlabs: false },
   sessions: [],
   activeSessionId: null,
-  external: [],
-  externalProviders: [],
-  externalRefreshing: false,
   activity: [],
   system: null,
   agents: [],
@@ -111,8 +98,6 @@ function reducer(state: State, action: Action): State {
         secrets: action.payload.secrets,
         sessions,
         activeSessionId: pickActive(sessions, state.activeSessionId),
-        external: action.payload.external,
-        externalProviders: action.payload.providers,
         activity: action.payload.activity,
         system: action.payload.system,
         agents: action.payload.agents
@@ -139,12 +124,6 @@ function reducer(state: State, action: Action): State {
     }
     case 'active':
       return { ...state, activeSessionId: action.id }
-    case 'external':
-      return { ...state, external: action.sessions }
-    case 'providers':
-      return { ...state, externalProviders: action.providers }
-    case 'external-refreshing':
-      return { ...state, externalRefreshing: action.value }
     case 'activity':
       return { ...state, activity: action.events }
     case 'activity-add':
@@ -174,9 +153,8 @@ interface AppActions {
   setActiveSession: (id: string) => void
   createTerminal: (options?: { cwd?: string; title?: string; shell?: string; args?: string[] }) => Promise<TerminalSessionInfo | null>
   renameSession: (id: string, title: string) => Promise<void>
-  closeSession: (id: string, mode: 'detach' | 'terminate') => Promise<void>
+  closeSession: (id: string) => Promise<void>
   refreshSessions: () => Promise<void>
-  refreshExternal: () => Promise<void>
   refreshSystem: () => Promise<void>
   refreshAgents: () => Promise<void>
   refreshSecrets: () => Promise<void>
@@ -232,18 +210,6 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
     dispatch({ type: 'secrets', secrets })
   }, [])
 
-  const refreshExternal = useCallback(async () => {
-    dispatch({ type: 'external-refreshing', value: true })
-    try {
-      const list = await window.voxterm.external.refresh()
-      dispatch({ type: 'external', sessions: list })
-    } catch (error) {
-      toast(`External discovery failed: ${errorMessage(error)}`, 'error')
-    } finally {
-      dispatch({ type: 'external-refreshing', value: false })
-    }
-  }, [toast])
-
   const loadActivity = useCallback(async () => {
     const events = await window.voxterm.activity.list()
     dispatch({ type: 'activity', events })
@@ -277,13 +243,13 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
   )
 
   const closeSession = useCallback<AppActions['closeSession']>(
-    async (id, mode) => {
+    async (id) => {
       try {
-        const result = await window.voxterm.terminals.close(id, mode)
+        const result = await window.voxterm.terminals.close(id)
         terminalRegistry.dispose(id)
         dispatch({ type: 'sessions', sessions: await window.voxterm.terminals.list() })
         if (result.message) {
-          toast(result.message, result.terminated || result.detached ? 'info' : 'error')
+          toast(result.message, result.terminated ? 'info' : 'error')
         }
       } catch (error) {
         toast(`Close failed: ${errorMessage(error)}`, 'error')
@@ -348,12 +314,10 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
 
     const load = async (): Promise<void> => {
       try {
-        const [settings, secrets, sessions, external, providers, activity, system, agents] = await Promise.all([
+        const [settings, secrets, sessions, activity, system, agents] = await Promise.all([
           window.voxterm.settings.get(),
           window.voxterm.settings.secretsStatus(),
           window.voxterm.terminals.list(),
-          window.voxterm.external.list(),
-          window.voxterm.external.listProviders(),
           window.voxterm.activity.list(),
           window.voxterm.system.info(),
           window.voxterm.agents.list()
@@ -361,7 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
         if (cancelled) return
         dispatch({
           type: 'init',
-          payload: { settings, secrets, sessions, external, providers, activity, system, agents }
+          payload: { settings, secrets, sessions, activity, system, agents }
         })
       } catch (error) {
         if (!cancelled) dispatch({ type: 'failed', error: errorMessage(error) })
@@ -374,7 +338,6 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
       window.voxterm.settings.onChanged((settings) => dispatch({ type: 'settings', settings })),
       window.voxterm.terminals.onSessionChanged((session) => dispatch({ type: 'upsert-session', session })),
       window.voxterm.terminals.onListChanged((sessions) => dispatch({ type: 'sessions', sessions })),
-      window.voxterm.external.onChanged((sessions) => dispatch({ type: 'external', sessions })),
       window.voxterm.activity.onEvent((event) => dispatch({ type: 'activity-add', event })),
       window.voxterm.app.onCloseRequested((payload) => dispatch({ type: 'close-prompt', payload }))
     ]
@@ -422,7 +385,6 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
       renameSession,
       closeSession,
       refreshSessions,
-      refreshExternal,
       refreshSystem,
       refreshAgents,
       refreshSecrets,
@@ -441,7 +403,6 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
       renameSession,
       closeSession,
       refreshSessions,
-      refreshExternal,
       refreshSystem,
       refreshAgents,
       refreshSecrets,

@@ -31,12 +31,6 @@ interface ManagedSession {
 export interface CreateSessionContext {
   /** Explicit working directory override. */
   cwd?: string
-  /** Marks the session as bound to an external provider session. */
-  origin?: 'managed' | 'external'
-  providerId?: string
-  externalSessionId?: string
-  /** Whether detaching should be offered for this session. */
-  detachable?: boolean
 }
 
 export interface SessionManagerDeps {
@@ -156,7 +150,6 @@ export class TerminalSessionManager {
     const info: TerminalSessionInfo = {
       id,
       title: options.title?.trim() || `${shell.name}`,
-      origin: context.origin ?? 'managed',
       shell: shell.path,
       shellName: shell.name,
       cwd,
@@ -166,8 +159,6 @@ export class TerminalSessionManager {
       status: 'running',
       exitCode: null,
       exitSignal: null,
-      providerId: context.providerId,
-      externalSessionId: context.externalSessionId,
       createdAt: now,
       lastActiveAt: now
     }

@@ -5,7 +5,6 @@ import { registerSystemIpc } from './system'
 import { registerWindowIpc } from './window'
 import { registerTerminalIpc } from './terminal'
 import { registerAgentIpc } from './agents'
-import { registerExternalIpc } from './external'
 import { registerActivityIpc, registerAppIpc } from './activity'
 
 /** Register every request handler. Called once during app startup. */
@@ -15,15 +14,12 @@ export function registerIpcHandlers(services: Services): void {
   registerWindowIpc(services)
   registerTerminalIpc(services)
   registerAgentIpc(services)
-  registerExternalIpc(services)
   registerActivityIpc(services)
   registerAppIpc(services)
 }
 
 /**
  * Forward main-process events to the renderer and record genuine activity.
- * External discovery is diffed so "discovered" events are logged once per
- * session rather than on every refresh.
  */
 export function wireMainEvents(services: Services): () => void {
   const disposers: Array<() => void> = []

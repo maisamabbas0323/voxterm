@@ -1,8 +1,28 @@
 import { type ReactNode } from 'react'
 import { AudioLines, Keyboard, Mic, Settings2, Terminal, Waves } from 'lucide-react'
 import { useApp } from '../state/store'
-import { Notice, Pill } from '../components/primitives'
+import { Notice } from '../components/primitives'
 import { shortenPath } from '../lib/format'
+
+function StatusLine({ ready, label }: { ready: boolean; label: string }): ReactNode {
+  return (
+    <div className="row row--between">
+      <span className="muted">{label}</span>
+      <span className="row" style={{ gap: 6 }}>
+        <span className={ready ? 'dot dot--running' : 'dot dot--exited'} aria-hidden="true" />
+        <span style={{ fontSize: 'var(--fs-xs)', color: ready ? 'var(--success)' : 'var(--text-muted)' }}>
+          {ready ? 'ready' : 'missing'}
+        </span>
+      </span>
+    </div>
+  )
+}
+
+const FLOW_STEPS: Array<{ icon: ReactNode; text: string }> = [
+  { icon: <Keyboard size={14} />, text: 'Press the push-to-talk hotkey to begin capturing audio.' },
+  { icon: <Mic size={14} />, text: 'Local Whisper transcription turns your speech into a text prompt.' },
+  { icon: <Terminal size={14} />, text: 'Review the prompt, then send it to the active terminal session.' }
+]
 
 export function VoicePage(): ReactNode {
   const { state, actions } = useApp()
@@ -26,19 +46,24 @@ export function VoicePage(): ReactNode {
 
       <div className="page__body stack">
         <Notice tone="info" icon={<Mic size={16} />}>
-          Voice capture, transcription and announcements are <strong>not active in this build</strong>. This
-          milestone delivers the Electron foundation, real terminal sessions and the integration architecture.
-          The microphone pipeline (push-to-talk, local Whisper transcription, prompt review before send) is
-          scheduled for a later milestone. Preferences below are stored now and will apply once the runtime
-          ships.
+          Voice capture, transcription and announcements are <strong>not active in this build</strong>. The
+          microphone pipeline — push-to-talk, local Whisper transcription and prompt review — ships in a later
+          milestone. The preferences below are stored now and will apply once the runtime arrives.
         </Notice>
 
         <div className="panel">
           <div className="panel__header">
-            <span className="panel__title">Configuration</span>
-            <Pill tone={settings?.voice.enabled ? 'success' : 'neutral'}>
-              {settings?.voice.enabled ? 'enabled' : 'disabled'}
-            </Pill>
+            <div className="col">
+              <span className="panel__title">Configuration</span>
+              <span className="panel__caption">Stored preferences for the voice workflow.</span>
+            </div>
+            <span className="row" style={{ gap: 6 }}>
+              <span
+                className={settings?.voice.enabled ? 'dot dot--running' : 'dot dot--exited'}
+                aria-hidden="true"
+              />
+              <span className="panel__caption">{settings?.voice.enabled ? 'enabled' : 'disabled'}</span>
+            </span>
           </div>
           <div className="panel__body">
             <div className="kv">
@@ -60,58 +85,45 @@ export function VoicePage(): ReactNode {
           </div>
         </div>
 
-        <div className="row" style={{ alignItems: 'stretch', gap: 'var(--space-4)' }}>
-          <div className="panel grow">
+        <div className="split">
+          <div className="panel">
             <div className="panel__header">
-              <span className="panel__title">Local transcription</span>
+              <div className="col">
+                <span className="panel__title">Local transcription</span>
+                <span className="panel__caption">Everything runs on this machine by default.</span>
+              </div>
               <Waves size={15} className="muted" />
             </div>
             <div className="panel__body stack stack--sm">
-              <div className="row">
-                <span className="muted">Whisper binary</span>
-                <span className="grow" />
-                <Pill tone={whisper?.binaryPath ? 'success' : 'neutral'}>
-                  {whisper?.binaryPath ? 'found' : 'not found'}
-                </Pill>
-              </div>
-              <div className="row">
-                <span className="muted">Model file</span>
-                <span className="grow" />
-                <Pill tone={whisper?.modelPresent ? 'success' : 'neutral'}>
-                  {whisper?.modelPresent ? 'present' : 'missing'}
-                </Pill>
-              </div>
+              <StatusLine ready={Boolean(whisper?.binaryPath)} label="Whisper binary" />
+              <StatusLine ready={Boolean(whisper?.modelPresent)} label="Model file" />
               <p className="muted" style={{ fontSize: 'var(--fs-xs)', lineHeight: 1.5 }}>
-                Transcription runs locally by default so terminal content never leaves the machine unless a
-                cloud provider is explicitly enabled in Settings.
+                Terminal content never leaves the machine unless a cloud provider is explicitly enabled in
+                Settings.
               </p>
             </div>
           </div>
 
-          <div className="panel grow">
+          <div className="panel">
             <div className="panel__header">
-              <span className="panel__title">Data flow (planned)</span>
+              <div className="col">
+                <span className="panel__title">Planned flow</span>
+                <span className="panel__caption">How voice input will reach your terminal.</span>
+              </div>
               <AudioLines size={15} className="muted" />
             </div>
-            <div className="panel__body stack stack--sm">
-              <div className="row">
-                <Keyboard size={14} className="muted" />
-                <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
-                  Hotkey pressed → microphone capture begins
-                </span>
-              </div>
-              <div className="row">
-                <Mic size={14} className="muted" />
-                <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
-                  Local transcription produces a text prompt
-                </span>
-              </div>
-              <div className="row">
-                <Terminal size={14} className="muted" />
-                <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
-                  Review, then send to the active terminal session
-                </span>
-              </div>
+            <div className="panel__body">
+              <ol className="steps">
+                {FLOW_STEPS.map((step, index) => (
+                  <li className="steps__item" key={index}>
+                    <span className="steps__index">{index + 1}</span>
+                    <span className="steps__icon" aria-hidden="true">
+                      {step.icon}
+                    </span>
+                    <span className="steps__text">{step.text}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
         </div>

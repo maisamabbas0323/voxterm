@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
-import type { CloseSessionMode, CloseSessionResult, TerminalSessionInfo } from '@shared/types'
+import type { CloseSessionResult, TerminalSessionInfo } from '@shared/types'
 import type { Services } from '../services'
 import { parseOrThrow } from './util'
 import {
@@ -15,73 +15,25 @@ import {
 const sessionIdSchema = z.string().uuid()
 
 /**
- * Close semantics are explicit and never conflated:
- *  - managed session  -> the shell is genuinely terminated.
- *  - external session -> detach keeps the shared session alive; terminate ends
- *    it through the provider's real mechanism.
+ * Close a terminal session. Closing a tab and terminating its process are the
+ * same operation for a VoxTerm-managed shell: the process group is terminated
+ * so nothing is left orphaned, then the tab disappears.
  */
-async function closeSession(
-  services: Services,
-  sessionId: string,
-  mode: CloseSessionMode
-): Promise<CloseSessionResult> {
+async function closeSession(services: Services, sessionId: string): Promise<CloseSessionResult> {
   const info = services.sessions.get(sessionId)
   if (!info) {
-    return { id: sessionId, mode, terminated: false, detached: true, message: 'Session already closed.' }
-  }
-
-  if (info.origin === 'external' && info.providerId && info.externalSessionId) {
-    const fullExternalId = `${info.providerId}:${info.externalSessionId}`
-    if (mode === 'detach') {
-      const result = await services.external.detach(fullExternalId)
-      services.activity.record({
-        category: 'external',
-        type: 'external.detached',
-        message: `Detached from ${info.title}`,
-        level: 'info',
-        details: { providerId: info.providerId, session: info.externalSessionId }
-      })
-      return {
-        id: sessionId,
-        mode,
-        terminated: false,
-        detached: result.ok,
-        message: result.message
-      }
-    }
-    const result = await services.external.terminate(fullExternalId)
-    if (!result.ok) {
-      // The shared session could not be ended through the provider; at minimum
-      // remove VoxTerm's own client so the tab can close honestly.
-      await services.sessions.terminate(sessionId, 'SIGHUP').catch(() => undefined)
-      return {
-        id: sessionId,
-        mode,
-        terminated: false,
-        detached: true,
-        message: result.message ?? 'Underlying session could not be terminated.'
-      }
-    }
-    services.activity.record({
-      category: 'external',
-      type: 'external.terminated',
-      message: `Terminated external session ${info.title}`,
-      level: 'warn',
-      details: { providerId: info.providerId, session: info.externalSessionId }
-    })
-    await services.sessions.terminate(sessionId, 'SIGHUP').catch(() => undefined)
-    return { id: sessionId, mode, terminated: true, detached: false }
+    return { id: sessionId, terminated: false, message: 'Session already closed.' }
   }
 
   await services.sessions.terminate(sessionId)
   services.activity.record({
     category: 'terminal',
-    type: mode === 'detach' ? 'terminal.closed' : 'terminal.terminated',
-    message: `Terminated terminal "${info.title}"`,
+    type: 'terminal.closed',
+    message: `Closed terminal "${info.title}"`,
     level: 'info',
     details: { sessionId, shell: info.shellName }
   })
-  return { id: sessionId, mode, terminated: true, detached: false }
+  return { id: sessionId, terminated: true }
 }
 
 export function registerTerminalIpc(services: Services): void {
@@ -127,13 +79,8 @@ export function registerTerminalIpc(services: Services): void {
   })
 
   ipcMain.handle(IPC.terminalClose, async (_event, payload: unknown) => {
-    const { sessionId, mode } = parseOrThrow(terminalCloseSchema, payload)
-    return closeSession(services, sessionId, mode)
-  })
-
-  ipcMain.handle(IPC.terminalTerminate, async (_event, payload: unknown) => {
-    const parsed = parseOrThrow(z.object({ sessionId: sessionIdSchema }), payload)
-    return closeSession(services, parsed.sessionId, 'terminate')
+    const sessionId = parseOrThrow(terminalCloseSchema, payload)
+    return closeSession(services, sessionId)
   })
 }
 

@@ -1,34 +1,13 @@
 import type { ReactNode } from 'react'
 
-export type DotState =
-  | 'running'
-  | 'starting'
-  | 'exited'
-  | 'connected'
-  | 'attachable'
-  | 'detached'
-  | 'detected'
-  | 'unsupported'
-  | 'attach_failed'
+export type DotState = 'running' | 'starting' | 'exited'
 
 export function statusDotClass(state: DotState): string {
   switch (state) {
     case 'running':
       return 'dot dot--running'
-    case 'connected':
-      return 'dot dot--connected'
-    case 'attachable':
-      return 'dot dot--attachable'
     case 'starting':
-      return 'dot dot--attachable'
-    case 'detached':
-      return 'dot dot--detected'
-    case 'detected':
-      return 'dot dot--detected'
-    case 'unsupported':
-      return 'dot dot--unsupported'
-    case 'attach_failed':
-      return 'dot dot--attach_failed'
+      return 'dot dot--starting'
     case 'exited':
     default:
       return 'dot dot--exited'
@@ -37,13 +16,6 @@ export function statusDotClass(state: DotState): string {
 
 export function StatusDot({ state, title }: { state: DotState; title?: string }): ReactNode {
   return <span className={statusDotClass(state)} title={title} aria-hidden="true" />
-}
-
-export type PillTone = 'neutral' | 'success' | 'warning' | 'danger' | 'accent'
-
-export function Pill({ tone = 'neutral', children }: { tone?: PillTone; children: ReactNode }): ReactNode {
-  const cls = tone === 'neutral' ? 'pill' : `pill pill--${tone}`
-  return <span className={cls}>{children}</span>
 }
 
 export function Field({

@@ -1,20 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import {
-  ChevronsDown,
-  Eraser,
-  ExternalLink,
-  Plug,
-  Search,
-  SquareTerminal,
-  X
-} from 'lucide-react'
-import type { ExternalSessionInfo, TerminalSessionInfo } from '@shared/types'
+import { ChevronsDown, Copy, Eraser, Plus, Search, SquareTerminal, X } from 'lucide-react'
+import type { TerminalSessionInfo } from '@shared/types'
 import { useApp } from '../state/store'
 import { TerminalSurface } from '../features/terminals/TerminalSurface'
 import { TerminalTabs } from '../features/terminals/TerminalTabs'
-import { ExternalPanel } from '../features/terminals/ExternalPanel'
 import { terminalRegistry } from '../features/terminals/registry'
-import { EmptyState, Notice, Pill } from '../components/primitives'
+import { EmptyState, Notice } from '../components/primitives'
 import { Modal } from '../components/Modal'
 import { Tooltip } from '../components/Tooltip'
 import { shortenPath } from '../lib/format'
@@ -28,7 +19,7 @@ export function TerminalsPage(): ReactNode {
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle')
-  const [confirm, setConfirm] = useState<{ session: TerminalSessionInfo; mode: 'detach' | 'terminate' } | null>(null)
+  const [confirm, setConfirm] = useState<TerminalSessionInfo | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const activeSession = useMemo(
@@ -55,12 +46,6 @@ export function TerminalsPage(): ReactNode {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Refresh external discovery when the terminals view becomes visible.
-  useEffect(() => {
-    if (state.external.length === 0) void actions.refreshExternal()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const runSearch = useCallback(
     (direction: 'next' | 'previous') => {
       if (!activeSessionId || !query) {
@@ -84,18 +69,13 @@ export function TerminalsPage(): ReactNode {
   }, [activeSessionId])
 
   const requestClose = useCallback(
-    (session: TerminalSessionInfo, mode: 'detach' | 'terminate') => {
-      const confirmBefore =
-        settings?.terminal.confirmBeforeTerminate ?? true
-      const needsConfirm =
-        session.origin === 'external'
-          ? mode === 'terminate'
-          : session.status === 'running' && confirmBefore
-      if (needsConfirm) {
-        setConfirm({ session, mode })
+    (session: TerminalSessionInfo) => {
+      const confirmBefore = settings?.terminal.confirmBeforeTerminate ?? true
+      if (session.status === 'running' && confirmBefore) {
+        setConfirm(session)
         return
       }
-      void actions.closeSession(session.id, mode)
+      void actions.closeSession(session.id)
     },
     [actions, settings]
   )
@@ -104,51 +84,14 @@ export function TerminalsPage(): ReactNode {
   useEffect(() => {
     const handler = (): void => {
       const session = sessions.find((item) => item.id === activeSessionId)
-      if (session) requestClose(session, 'terminate')
+      if (session) requestClose(session)
     }
     window.addEventListener('voxterm:close-active', handler)
     return () => window.removeEventListener('voxterm:close-active', handler)
   }, [sessions, activeSessionId, requestClose])
 
-  const onAttach = useCallback(
-    async (external: ExternalSessionInfo) => {
-      const result = await window.voxterm.external.attach(external.id)
-      if (result.ok && result.managedSessionId) {
-        await actions.refreshSessions()
-        actions.setActiveSession(result.managedSessionId)
-        actions.toast(`Attached to ${external.name}.`, 'success')
-      } else {
-        actions.toast(result.message ?? `Unable to attach to ${external.name}.`, 'error')
-      }
-      void actions.refreshExternal()
-    },
-    [actions]
-  )
-
-  const onDetach = useCallback(
-    async (external: ExternalSessionInfo) => {
-      const result = await window.voxterm.external.detach(external.id)
-      actions.toast(result.message ?? (result.ok ? 'Detached.' : 'Detach failed.'), result.ok ? 'info' : 'error')
-      await actions.refreshSessions()
-      void actions.refreshExternal()
-    },
-    [actions]
-  )
-
-  const onTerminateExternal = useCallback(
-    async (external: ExternalSessionInfo) => {
-      const result = await window.voxterm.external.terminate(external.id)
-      actions.toast(
-        result.message ?? (result.ok ? `Terminated ${external.name}.` : 'Terminate failed.'),
-        result.ok ? 'info' : 'error'
-      )
-      await actions.refreshSessions()
-      void actions.refreshExternal()
-    },
-    [actions]
-  )
-
   const hasSessions = sessions.length > 0
+  const runningCount = sessions.filter((session) => session.status === 'running').length
 
   return (
     <div className="terminals">
@@ -161,196 +104,181 @@ export function TerminalsPage(): ReactNode {
         onCreate={() => void actions.createTerminal()}
       />
 
-      <div className="terminals__layout">
-        <div className="terminals__main">
-          {activeSession ? (
-            <div className="terminal-toolbar">
-              <div className="terminal-meta">
-                <Pill tone={activeSession.status === 'running' ? 'success' : 'neutral'}>
-                  {activeSession.status}
-                </Pill>
-                <span className="mono truncate">{shortenPath(activeSession.cwd)}</span>
-                <span className="muted mono">{activeSession.shellName}</span>
-                {activeSession.pid !== null ? <span className="muted mono">pid {activeSession.pid}</span> : null}
-                {activeSession.origin === 'external' ? <Pill tone="accent">external</Pill> : null}
-              </div>
-              <div className="row">
-                <Tooltip label="Find (Ctrl+Shift+F)" placement="bottom">
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--icon btn--sm"
-                    aria-label="Find in terminal"
-                    onClick={() => (searchOpen ? closeSearch() : openSearch())}
-                  >
-                    <Search size={14} />
-                  </button>
-                </Tooltip>
-                <Tooltip label="Scroll to bottom" placement="bottom">
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--icon btn--sm"
-                    aria-label="Scroll terminal to bottom"
-                    onClick={() => {
-                      const controller = terminalRegistry.get(activeSession.id)
-                      controller?.term.scrollToBottom()
-                    }}
-                  >
-                    <ChevronsDown size={14} />
-                  </button>
-                </Tooltip>
-                <Tooltip label="Clear scrollback" placement="bottom">
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--icon btn--sm"
-                    aria-label="Clear terminal"
-                    onClick={() => terminalRegistry.get(activeSession.id)?.clear()}
-                  >
-                    <Eraser size={14} />
-                  </button>
-                </Tooltip>
-                <Tooltip label="Duplicate tab (new shell in same directory)" placement="bottom">
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--icon btn--sm"
-                    aria-label="New terminal in the same directory"
-                    onClick={() => void actions.createTerminal({ cwd: activeSession.cwd })}
-                  >
-                    <ExternalLink size={14} />
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="terminal-viewport">
-            {hasSessions && settings ? (
-              sessions.map((session) => (
-                <TerminalSurface
-                  key={session.id}
-                  sessionId={session.id}
-                  active={session.id === activeSessionId}
-                  settings={settings}
-                />
-              ))
-            ) : (
-              <EmptyState
-                icon={<SquareTerminal size={26} />}
-                title="No terminal sessions"
-                text="Open a terminal to start a real shell. Sessions keep running while you switch tabs."
-                action={
-                  <button className="btn btn--primary" onClick={() => void actions.createTerminal()}>
-                    <Plug size={15} />
-                    New terminal
-                  </button>
-                }
+      <div className="terminals__main">
+        {activeSession ? (
+          <div className="terminal-toolbar">
+            <div className="terminal-meta">
+              <span
+                className={activeSession.status === 'running' ? 'dot dot--running' : 'dot dot--exited'}
+                aria-hidden="true"
               />
-            )}
-
-            {searchOpen ? (
-              <div className="terminal-search" role="search">
-                <Search size={14} className="muted" />
-                <input
-                  ref={searchInputRef}
-                  className="input"
-                  placeholder="Find…"
-                  value={query}
-                  onChange={(event) => {
-                    setQuery(event.target.value)
-                    setSearchStatus('idle')
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      runSearch(event.shiftKey ? 'previous' : 'next')
-                    } else if (event.key === 'Escape') {
-                      event.preventDefault()
-                      closeSearch()
-                    }
-                  }}
-                />
-                <span className="search-count">
-                  {searchStatus === 'none' ? 'No match' : searchStatus === 'found' ? 'Match' : ''}
-                </span>
+              <span className="terminal-meta__title truncate">{activeSession.title}</span>
+              <span className="terminal-meta__sep" aria-hidden="true" />
+              <span className="terminal-meta__item mono truncate" title={activeSession.cwd}>
+                {shortenPath(activeSession.cwd) || '~'}
+              </span>
+              <span className="terminal-meta__item mono hide-sm">{activeSession.shellName}</span>
+              {activeSession.pid !== null ? (
+                <span className="terminal-meta__item mono hide-sm">pid {activeSession.pid}</span>
+              ) : null}
+            </div>
+            <div className="terminal-toolbar__actions">
+              <Tooltip label="Find in terminal (Ctrl+Shift+F)" placement="bottom">
                 <button
                   type="button"
                   className="btn btn--ghost btn--icon btn--sm"
-                  aria-label="Close find"
-                  onClick={closeSearch}
+                  aria-label="Find in terminal"
+                  onClick={() => (searchOpen ? closeSearch() : openSearch())}
                 >
-                  <X size={13} />
+                  <Search size={14} />
                 </button>
-              </div>
-            ) : null}
+              </Tooltip>
+              <Tooltip label="Scroll to bottom" placement="bottom">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--icon btn--sm"
+                  aria-label="Scroll terminal to bottom"
+                  onClick={() => terminalRegistry.get(activeSession.id)?.term.scrollToBottom()}
+                >
+                  <ChevronsDown size={14} />
+                </button>
+              </Tooltip>
+              <Tooltip label="Clear scrollback" placement="bottom">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--icon btn--sm"
+                  aria-label="Clear terminal"
+                  onClick={() => terminalRegistry.get(activeSession.id)?.clear()}
+                >
+                  <Eraser size={14} />
+                </button>
+              </Tooltip>
+              <Tooltip label="Copy working directory" placement="bottom">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--icon btn--sm"
+                  aria-label="Copy working directory"
+                  onClick={() => void window.voxterm.clipboard.writeText(activeSession.cwd)}
+                >
+                  <Copy size={14} />
+                </button>
+              </Tooltip>
+              <Tooltip label="New shell in the same directory" placement="bottom">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--icon btn--sm"
+                  aria-label="New terminal in the same directory"
+                  onClick={() => void actions.createTerminal({ cwd: activeSession.cwd })}
+                >
+                  <Plus size={14} />
+                </button>
+              </Tooltip>
+            </div>
           </div>
+        ) : null}
 
-          {activeSession && activeSession.status === 'exited' ? (
-            <div style={{ padding: 'var(--space-3)' }}>
-              <Notice tone="warning" icon={<SquareTerminal size={15} />}>
-                This session has exited
-                {activeSession.exitCode !== null ? ` with code ${activeSession.exitCode}` : ''}. The scrollback
-                above is preserved. Start a new terminal to continue.
-              </Notice>
+        <div className="terminal-viewport">
+          {hasSessions && settings ? (
+            sessions.map((session) => (
+              <TerminalSurface
+                key={session.id}
+                sessionId={session.id}
+                active={session.id === activeSessionId}
+                settings={settings}
+              />
+            ))
+          ) : (
+            <EmptyState
+              icon={<SquareTerminal size={26} />}
+              title="No terminal sessions"
+              text="Open a terminal to start a real shell. Sessions keep running while you switch tabs."
+              action={
+                <button className="btn btn--primary" onClick={() => void actions.createTerminal()}>
+                  <Plus size={15} />
+                  New terminal
+                </button>
+              }
+            />
+          )}
+
+          {searchOpen ? (
+            <div className="terminal-search" role="search">
+              <Search size={14} className="muted" />
+              <input
+                ref={searchInputRef}
+                className="input"
+                placeholder="Find…"
+                aria-label="Find in terminal"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value)
+                  setSearchStatus('idle')
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    runSearch(event.shiftKey ? 'previous' : 'next')
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault()
+                    closeSearch()
+                  }
+                }}
+              />
+              <span className="search-count">
+                {searchStatus === 'none' ? 'No match' : searchStatus === 'found' ? 'Match' : ''}
+              </span>
+              <button
+                type="button"
+                className="btn btn--ghost btn--icon btn--sm"
+                aria-label="Close find"
+                onClick={closeSearch}
+              >
+                <X size={13} />
+              </button>
             </div>
           ) : null}
         </div>
 
-        <div className="terminals__side">
-          <ExternalPanel
-            providers={state.externalProviders}
-            sessions={state.external}
-            refreshing={state.externalRefreshing}
-            onRefresh={() => void actions.refreshExternal()}
-            onAttach={(session) => void onAttach(session)}
-            onDetach={(session) => void onDetach(session)}
-            onTerminate={(session) => void onTerminateExternal(session)}
-            onOpen={(managedId) => {
-              void actions.refreshSessions()
-              actions.setActiveSession(managedId)
-            }}
-          />
-        </div>
+        {activeSession && activeSession.status === 'exited' ? (
+          <div className="terminals__notice">
+            <Notice tone="warning" icon={<SquareTerminal size={15} />}>
+              This session has exited
+              {activeSession.exitCode !== null ? ` with code ${activeSession.exitCode}` : ''}. The scrollback
+              above is preserved — start a new terminal to continue.
+            </Notice>
+          </div>
+        ) : null}
       </div>
 
       {confirm ? (
         <Modal
-          title={confirm.session.origin === 'external' ? 'Terminate shared session' : 'Terminate session'}
-          description={
-            confirm.session.origin === 'external'
-              ? `This ends the external session "${confirm.session.title}" for every client, not just VoxTerm.`
-              : `The shell "${confirm.session.title}" and everything running inside it will be terminated.`
-          }
+          title="Terminate session"
+          description={`The shell "${confirm.title}" and everything running inside it will be terminated.`}
           onClose={() => setConfirm(null)}
           footer={
             <>
               <button className="btn" onClick={() => setConfirm(null)}>
                 Cancel
               </button>
-              {confirm.session.origin === 'external' ? (
-                <button
-                  className="btn"
-                  onClick={() => {
-                    const session = confirm.session
-                    setConfirm(null)
-                    void actions.closeSession(session.id, 'detach')
-                  }}
-                >
-                  Detach instead
-                </button>
-              ) : null}
               <button
                 className="btn btn--danger"
                 data-autofocus
                 onClick={() => {
-                  const current = confirm
+                  const session = confirm
                   setConfirm(null)
-                  void actions.closeSession(current.session.id, current.mode)
+                  void actions.closeSession(session.id)
                 }}
               >
                 Terminate
               </button>
             </>
           }
-        />
+        >
+          <p className="muted" style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.55 }}>
+            {runningCount} of {sessions.length} sessions are running. You can disable this confirmation in
+            Settings → Terminal.
+          </p>
+        </Modal>
       ) : null}
     </div>
   )

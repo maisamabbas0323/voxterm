@@ -2,12 +2,8 @@ import type {
   ActivityEvent,
   AgentProfile,
   AgentProfileStatus,
-  AttachExternalResult,
-  CloseSessionMode,
   CloseSessionResult,
   CreateTerminalOptions,
-  ExternalProviderInfo,
-  ExternalSessionInfo,
   OperationResult,
   SystemInfo,
   TerminalSessionInfo
@@ -33,13 +29,6 @@ export interface TerminalTitlePayload {
 export interface AppCloseRequestPayload {
   runningSessions: number
   totalSessions: number
-}
-
-export interface ExternalStatusResult {
-  id: string
-  state: ExternalSessionInfo['state']
-  managedSessionId?: string
-  detail?: string
 }
 
 export interface AgentSavePayload {
@@ -89,8 +78,7 @@ export interface VoxTermAPI {
     input(sessionId: string, data: string): Promise<OperationResult>
     resize(sessionId: string, cols: number, rows: number): Promise<OperationResult>
     rename(sessionId: string, title: string): Promise<OperationResult>
-    close(sessionId: string, mode: CloseSessionMode): Promise<CloseSessionResult>
-    terminate(sessionId: string): Promise<CloseSessionResult>
+    close(sessionId: string): Promise<CloseSessionResult>
     snapshot(sessionId: string): Promise<string>
     onData(listener: (payload: TerminalDataPayload) => void): () => void
     onExit(listener: (payload: TerminalExitPayload) => void): () => void
@@ -102,16 +90,6 @@ export interface VoxTermAPI {
     list(): Promise<AgentProfileStatus[]>
     save(profile: AgentSavePayload): Promise<AgentProfileStatus[]>
     delete(id: string): Promise<AgentProfileStatus[]>
-  }
-  external: {
-    listProviders(): Promise<ExternalProviderInfo[]>
-    list(): Promise<ExternalSessionInfo[]>
-    refresh(): Promise<ExternalSessionInfo[]>
-    attach(id: string): Promise<AttachExternalResult>
-    detach(id: string): Promise<OperationResult>
-    terminate(id: string): Promise<OperationResult>
-    status(id: string): Promise<ExternalStatusResult>
-    onChanged(listener: (sessions: ExternalSessionInfo[]) => void): () => void
   }
   activity: {
     list(): Promise<ActivityEvent[]>

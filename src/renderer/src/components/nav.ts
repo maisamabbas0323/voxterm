@@ -11,9 +11,9 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { key: 'workspace', label: 'Workspace', icon: LayoutDashboard, description: 'Overview of sessions and system' },
-  { key: 'terminals', label: 'Terminals', icon: SquareTerminal, description: 'Managed and external terminal sessions' },
-  { key: 'voice', label: 'Voice', icon: Mic, description: 'Voice workflow status and configuration' },
+  { key: 'workspace', label: 'Workspace', icon: LayoutDashboard, description: 'Overview of terminals, agents and system' },
+  { key: 'terminals', label: 'Terminals', icon: SquareTerminal, description: 'Real shell sessions and tabs' },
+  { key: 'voice', label: 'Voice', icon: Mic, description: 'Speech input and spoken announcements' },
   { key: 'activity', label: 'Activity', icon: Activity, description: 'History of application events' },
   { key: 'settings', label: 'Settings', icon: Settings2, description: 'Configure VoxTerm' }
 ]

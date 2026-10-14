@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { KeyRound, RotateCcw, ShieldCheck } from 'lucide-react'
 import { SETTINGS_SECTIONS, type SecretSlot, type Settings, type SettingsSection } from '@shared/schemas'
 import { useApp } from '../state/store'
-import { Notice, Pill, Switch } from '../components/primitives'
+import { Notice, Switch } from '../components/primitives'
 import { shortenPath } from '../lib/format'
+import { TERMINAL_FONTS, findTerminalFont } from '../lib/fonts'
 
 const SECTION_LABELS: Record<SettingsSection, string> = {
   appearance: 'Appearance',
   terminal: 'Terminal',
-  external: 'External sessions',
   voice: 'Voice',
   prompts: 'Prompt providers',
   announcements: 'Announcements',
@@ -32,7 +32,11 @@ function Row({
     <div className={stacked ? 'settings__field settings__field--stacked' : 'settings__field'}>
       <div>
         <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 500 }}>{label}</div>
-        {hint ? <div className="field__hint" style={{ marginTop: 2 }}>{hint}</div> : null}
+        {hint ? (
+          <div className="field__hint" style={{ marginTop: 2 }}>
+            {hint}
+          </div>
+        ) : null}
       </div>
       <div>{control}</div>
     </div>
@@ -79,6 +83,35 @@ function DraftInput({
         }
       }}
     />
+  )
+}
+
+/** Dropdown of curated monospace families with a live preview. */
+function FontPicker({
+  value,
+  onChange
+}: {
+  value: string
+  onChange: (stack: string) => void
+}): ReactNode {
+  const known = findTerminalFont(value)
+
+  return (
+    <div className="font-picker">
+      <select className="select" value={value} onChange={(event) => onChange(event.target.value)}>
+        {TERMINAL_FONTS.map((font) => (
+          <option key={font.id} value={font.stack}>
+            {font.label}
+          </option>
+        ))}
+        {!known ? <option value={value}>Custom stack</option> : null}
+      </select>
+      <div className="font-picker__preview" style={{ fontFamily: value }} aria-hidden="true">
+        <span>λ → git status --short</span>
+        <span className="font-picker__preview-dim">The quick brown fox 0123456789</span>
+      </div>
+      <div className="field__hint">{known ? known.note : 'Using a custom font stack.'}</div>
+    </div>
   )
 }
 
@@ -171,9 +204,9 @@ export function SettingsPage(): ReactNode {
   }
 
   const update = (patch: Partial<Settings>): void => void actions.updateSettings(patch)
-  const appearance = (patch: Partial<Settings['appearance']>): void => update({ appearance: patch as Settings['appearance'] })
+  const appearance = (patch: Partial<Settings['appearance']>): void =>
+    update({ appearance: patch as Settings['appearance'] })
   const terminal = (patch: Partial<Settings['terminal']>): void => update({ terminal: patch as Settings['terminal'] })
-  const external = (patch: Partial<Settings['external']>): void => update({ external: patch as Settings['external'] })
   const voice = (patch: Partial<Settings['voice']>): void => update({ voice: patch as Settings['voice'] })
   const prompts = (patch: Partial<Settings['prompts']>): void => update({ prompts: patch as Settings['prompts'] })
   const announcements = (patch: Partial<Settings['announcements']>): void =>
@@ -187,19 +220,24 @@ export function SettingsPage(): ReactNode {
           <input
             className="input"
             placeholder="Search settings"
+            aria-label="Search settings"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        {visibleSections.map((key) => (
-          <button
-            key={key}
-            className={key === section ? 'settings__link settings__link--active' : 'settings__link'}
-            onClick={() => setSection(key)}
-          >
-            {SECTION_LABELS[key]}
-          </button>
-        ))}
+        <div className="settings__links">
+          {visibleSections.map((key) => (
+            <button
+              key={key}
+              className={key === section ? 'settings__link settings__link--active' : 'settings__link'}
+              onClick={() => setSection(key)}
+            >
+              {SECTION_LABELS[key]}
+            </button>
+          ))}
+          {visibleSections.length === 0 ? <span className="settings__empty">No matches</span> : null}
+        </div>
+        <div className="settings__note">Changes save automatically.</div>
       </nav>
 
       <div className="settings__content">
@@ -218,7 +256,9 @@ export function SettingsPage(): ReactNode {
                     <select
                       className="select"
                       value={settings.appearance.theme}
-                      onChange={(event) => appearance({ theme: event.target.value as Settings['appearance']['theme'] })}
+                      onChange={(event) =>
+                        appearance({ theme: event.target.value as Settings['appearance']['theme'] })
+                      }
                     >
                       <option value="voxterm">VoxTerm</option>
                       <option value="voxterm-contrast">VoxTerm contrast</option>
@@ -226,11 +266,13 @@ export function SettingsPage(): ReactNode {
                   }
                 />
                 <Row
-                  label="Terminal font family"
+                  label="Terminal font"
+                  hint="Choose the typeface used inside every terminal."
+                  stacked
                   control={
-                    <DraftInput
+                    <FontPicker
                       value={settings.appearance.terminalFontFamily}
-                      onCommit={(value) => value.trim() && appearance({ terminalFontFamily: value.trim() })}
+                      onChange={(stack) => appearance({ terminalFontFamily: stack })}
                     />
                   }
                 />
@@ -244,9 +286,7 @@ export function SettingsPage(): ReactNode {
                       max={32}
                       step={1}
                       value={settings.appearance.terminalFontSize}
-                      onChange={(event) =>
-                        appearance({ terminalFontSize: Number(event.target.value) })
-                      }
+                      onChange={(event) => appearance({ terminalFontSize: Number(event.target.value) })}
                     />
                   }
                 />
@@ -260,9 +300,7 @@ export function SettingsPage(): ReactNode {
                       max={2.5}
                       step={0.05}
                       value={settings.appearance.terminalLineHeight}
-                      onChange={(event) =>
-                        appearance({ terminalLineHeight: Number(event.target.value) })
-                      }
+                      onChange={(event) => appearance({ terminalLineHeight: Number(event.target.value) })}
                     />
                   }
                 />
@@ -457,117 +495,6 @@ export function SettingsPage(): ReactNode {
                       checked={settings.terminal.detectLinks}
                       onChange={(value) => terminal({ detectLinks: value })}
                     />
-                  }
-                />
-              </div>
-            </>
-          ) : null}
-
-          {section === 'external' ? (
-            <>
-              <div className="settings__section-head">
-                <h2 className="settings__section-title">External sessions</h2>
-                <p className="settings__section-desc">
-                  Discovery is read-only scanning. VoxTerm never attaches to anything without your action.
-                </p>
-              </div>
-              <div className="settings__group">
-                <Row
-                  label="Enable discovery"
-                  control={
-                    <Switch
-                      label=""
-                      checked={settings.external.discoveryEnabled}
-                      onChange={(value) => external({ discoveryEnabled: value })}
-                    />
-                  }
-                />
-                <Row
-                  label="Scan interval"
-                  hint={`${Math.round(settings.external.discoveryIntervalMs / 1000)} seconds`}
-                  control={
-                    <input
-                      type="range"
-                      min={2}
-                      max={120}
-                      step={1}
-                      value={Math.round(settings.external.discoveryIntervalMs / 1000)}
-                      onChange={(event) =>
-                        external({ discoveryIntervalMs: Number(event.target.value) * 1000 })
-                      }
-                    />
-                  }
-                />
-                <Row
-                  label="Scan when window regains focus"
-                  control={
-                    <Switch
-                      label=""
-                      checked={settings.external.refreshOnFocus}
-                      onChange={(value) => external({ refreshOnFocus: value })}
-                    />
-                  }
-                />
-                <Row
-                  label="Providers"
-                  stacked
-                  hint="An empty selection means all available providers are scanned."
-                  control={
-                    <div className="chip-row">
-                      {state.externalProviders.map((provider) => {
-                        const selected = settings.external.enabledProviders.includes(provider.id)
-                        return (
-                          <button
-                            key={provider.id}
-                            className={selected ? 'chip chip--active' : 'chip'}
-                            title={provider.available ? undefined : provider.reason}
-                            onClick={() => {
-                              const next = selected
-                                ? settings.external.enabledProviders.filter((id) => id !== provider.id)
-                                : [...settings.external.enabledProviders, provider.id]
-                              external({ enabledProviders: next })
-                            }}
-                          >
-                            {provider.name}
-                            {provider.available ? '' : ' (unavailable)'}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  }
-                />
-                <Row
-                  label="When attaching to a session already open here"
-                  control={
-                    <select
-                      className="select"
-                      value={settings.external.duplicateHandling}
-                      onChange={(event) =>
-                        external({
-                          duplicateHandling: event.target.value as Settings['external']['duplicateHandling']
-                        })
-                      }
-                    >
-                      <option value="warn">Warn me</option>
-                      <option value="focus">Focus the existing tab</option>
-                      <option value="allow">Allow a second client</option>
-                    </select>
-                  }
-                />
-                <Row
-                  label="Default close behaviour for external sessions"
-                  control={
-                    <select
-                      className="select"
-                      value={settings.external.onClosePolicy}
-                      onChange={(event) =>
-                        external({ onClosePolicy: event.target.value as Settings['external']['onClosePolicy'] })
-                      }
-                    >
-                      <option value="ask">Ask each time</option>
-                      <option value="detach">Detach (keep session alive)</option>
-                      <option value="terminate">Terminate the shared session</option>
-                    </select>
                   }
                 />
               </div>
@@ -885,8 +812,8 @@ export function SettingsPage(): ReactNode {
                       }
                     >
                       <option value="ask">Ask each time</option>
-                      <option value="terminate-managed">Terminate managed shells</option>
-                      <option value="keep-managed">Keep managed shells running</option>
+                      <option value="terminate-managed">Terminate shells on exit</option>
+                      <option value="keep-managed">Keep shells running</option>
                     </select>
                   }
                 />
@@ -962,7 +889,7 @@ export function SettingsPage(): ReactNode {
                 />
                 <SecretRow
                   slot="google"
-                  label="Google AI API key"
+                  label="Google API key"
                   present={state.secrets.google}
                   onSave={actions.setSecret}
                   onClear={actions.clearSecret}
@@ -990,10 +917,6 @@ export function SettingsPage(): ReactNode {
               </div>
             </>
           ) : null}
-
-          <div className="row" style={{ justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
-            <Pill tone="accent">saved automatically</Pill>
-          </div>
         </div>
       </div>
     </div>

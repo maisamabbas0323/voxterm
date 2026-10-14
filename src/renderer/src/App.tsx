@@ -1,10 +1,11 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
-import { AlertTriangle, Layers } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { useApp } from './state/store'
 import { TitleBar } from './components/TitleBar'
 import { Sidebar } from './components/Sidebar'
 import { ToastStack } from './components/Toasts'
 import { Modal } from './components/Modal'
+import { Logo } from './components/Logo'
 import { NAV_ITEMS } from './components/nav'
 import { TerminalsPage } from './pages/TerminalsPage'
 import { WorkspacePage } from './pages/WorkspacePage'
@@ -14,24 +15,26 @@ import { SettingsPage } from './pages/SettingsPage'
 
 function LoadingScreen(): ReactNode {
   return (
-    <div className="empty" style={{ height: '100vh' }}>
-      <div className="empty__icon">
-        <Layers size={26} />
+    <div className="boot">
+      <Logo size={72} className="boot__logo" />
+      <div className="boot__name">VoxTerm</div>
+      <div className="boot__tagline">Terminal workspace</div>
+      <div className="boot__bar" aria-hidden="true">
+        <span />
       </div>
-      <div className="empty__title">Starting VoxTerm</div>
-      <p className="empty__text">Preparing terminal backend and loading your workspace.</p>
+      <p className="boot__text">Preparing the terminal backend and loading your workspace…</p>
     </div>
   )
 }
 
 function ErrorScreen({ message }: { message: string }): ReactNode {
   return (
-    <div className="empty" style={{ height: '100vh' }}>
-      <div className="empty__icon" style={{ color: 'var(--danger)' }}>
-        <AlertTriangle size={26} />
+    <div className="boot">
+      <div className="boot__error-icon">
+        <AlertTriangle size={30} />
       </div>
-      <div className="empty__title">VoxTerm failed to start</div>
-      <p className="empty__text">{message}</p>
+      <div className="boot__name">VoxTerm failed to start</div>
+      <p className="boot__text">{message}</p>
     </div>
   )
 }

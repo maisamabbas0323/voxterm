@@ -4,30 +4,14 @@
  * bundled into the renderer safely.
  */
 
-/** Lifecycle of a VoxTerm-managed pseudo-terminal session. */
+/** Lifecycle of a VoxTerm terminal session. */
 export type ManagedSessionStatus = 'starting' | 'running' | 'exited'
 
-/**
- * Lifecycle of a session that originates outside VoxTerm (for example a
- * `tmux` session, or a foreign terminal window). States are intentionally
- * explicit so the UI never claims a connection that does not exist.
- */
-export type ExternalSessionState =
-  | 'detected'
-  | 'attachable'
-  | 'connected'
-  | 'detached'
-  | 'exited'
-  | 'unsupported'
-  | 'attach_failed'
-
-/** A managed terminal session as surfaced to the UI. */
+/** A terminal session as surfaced to the UI. */
 export interface TerminalSessionInfo {
   /** Stable identifier, independent of any visual tab position. */
   id: string
   title: string
-  /** How the session was created. */
-  origin: 'managed' | 'external'
   /** Absolute path to the executable backing the session. */
   shell: string
   shellName: string
@@ -38,9 +22,6 @@ export interface TerminalSessionInfo {
   status: ManagedSessionStatus
   exitCode: number | null
   exitSignal: number | null
-  /** Populated for `origin: 'external'`. */
-  providerId?: string
-  externalSessionId?: string
   createdAt: number
   lastActiveAt: number
 }
@@ -57,15 +38,10 @@ export interface CreateTerminalOptions {
   env?: Record<string, string>
 }
 
-export type CloseSessionMode = 'detach' | 'terminate'
-
-export interface CloseSessionResult {
+export type CloseSessionResult = {
   id: string
-  mode: CloseSessionMode
   /** Whether the underlying process was actually terminated. */
   terminated: boolean
-  /** True when the tab was removed but the process (external) kept running. */
-  detached: boolean
   message?: string
 }
 
@@ -74,61 +50,6 @@ export interface OperationResult {
   ok: boolean
   message?: string
   code?: string
-}
-
-// ---------------------------------------------------------------------------
-// External session integration
-// ---------------------------------------------------------------------------
-
-export interface ExternalProviderCapabilities {
-  discover: boolean
-  inspect: boolean
-  attach: boolean
-  detach: boolean
-  terminate: boolean
-  getStatus: boolean
-}
-
-export interface ExternalProviderInfo {
-  id: string
-  name: string
-  description: string
-  /** True when the underlying tool (e.g. `tmux`) is actually present. */
-  available: boolean
-  /** Human readable explanation when `available` is false. */
-  reason?: string
-  capabilities: ExternalProviderCapabilities
-}
-
-export interface ExternalSessionInfo {
-  /** Composite id: `${providerId}:${externalId}`. */
-  id: string
-  providerId: string
-  /** Provider-scoped identifier (e.g. the tmux session name). */
-  externalId: string
-  name: string
-  state: ExternalSessionState
-  pid: number | null
-  cwd: string | null
-  windows: number | null
-  attachedClients: number | null
-  createdAt: number | null
-  /** How this session was found, for transparency in the UI. */
-  source: string
-  attachable: boolean
-  terminatable: boolean
-  /** Managed session id when state is `connected`. */
-  managedSessionId?: string
-  /** Set when state is `attach_failed` or `unsupported`. */
-  detail?: string
-  detectedAt: number
-}
-
-export interface AttachExternalResult {
-  ok: boolean
-  state: ExternalSessionState
-  managedSessionId?: string
-  message?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +90,6 @@ export interface AgentProfileStatus extends AgentProfile {
 
 export type ActivityCategory =
   | 'terminal'
-  | 'external'
   | 'settings'
   | 'agent'
   | 'voice'
@@ -229,9 +149,5 @@ export interface SystemInfo {
     nodePty: boolean
     ptyVersion: string | null
     error?: string
-  }
-  externalDiscovery: {
-    enabled: boolean
-    providers: ExternalProviderInfo[]
   }
 }

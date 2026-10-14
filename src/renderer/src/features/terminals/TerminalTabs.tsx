@@ -9,8 +9,8 @@ interface TerminalTabsProps {
   sessions: TerminalSessionInfo[]
   activeId: string | null
   onSelect: (id: string) => void
-  /** Request closing/terminating a session; the page resolves the policy. */
-  onRequestClose: (session: TerminalSessionInfo, mode: 'detach' | 'terminate') => void
+  /** Request closing a session; the page resolves the confirmation policy. */
+  onRequestClose: (session: TerminalSessionInfo) => void
   onRename: (id: string, title: string) => void
   onCreate: () => void
 }
@@ -49,44 +49,25 @@ export function TerminalTabs({
     setRenaming(null)
   }
 
-  const menuEntries = (session: TerminalSessionInfo): MenuEntry[] => {
-    const entries: MenuEntry[] = [
-      {
-        id: 'rename',
-        label: 'Rename',
-        onSelect: () => setRenaming({ id: session.id, value: session.title })
-      },
-      {
-        id: 'copy-cwd',
-        label: 'Copy working directory',
-        onSelect: () => void window.voxterm.clipboard.writeText(session.cwd)
-      }
-    ]
-
-    if (session.origin === 'external') {
-      entries.push(
-        { id: 'sep-1', type: 'separator' },
-        { id: 'detach', label: 'Detach from session', onSelect: () => onRequestClose(session, 'detach') },
-        {
-          id: 'terminate',
-          label: 'Terminate shared session',
-          danger: true,
-          onSelect: () => onRequestClose(session, 'terminate')
-        }
-      )
-    } else {
-      entries.push(
-        { id: 'sep-1', type: 'separator' },
-        {
-          id: 'terminate',
-          label: session.status === 'running' ? 'Terminate session' : 'Close tab',
-          danger: session.status === 'running',
-          onSelect: () => onRequestClose(session, 'terminate')
-        }
-      )
+  const menuEntries = (session: TerminalSessionInfo): MenuEntry[] => [
+    {
+      id: 'rename',
+      label: 'Rename tab',
+      onSelect: () => setRenaming({ id: session.id, value: session.title })
+    },
+    {
+      id: 'copy-cwd',
+      label: 'Copy working directory',
+      onSelect: () => void window.voxterm.clipboard.writeText(session.cwd)
+    },
+    { id: 'sep-1', type: 'separator' },
+    {
+      id: 'close',
+      label: session.status === 'running' ? 'Terminate session' : 'Close tab',
+      danger: session.status === 'running',
+      onSelect: () => onRequestClose(session)
     }
-    return entries
-  }
+  ]
 
   return (
     <div className="tabs">
@@ -111,7 +92,7 @@ export function TerminalTabs({
               onAuxClick={(event) => {
                 if (event.button === 1) {
                   event.preventDefault()
-                  onRequestClose(session, 'terminate')
+                  onRequestClose(session)
                 }
               }}
               onContextMenu={(event) => {
@@ -147,7 +128,7 @@ export function TerminalTabs({
                 aria-label={`Close ${session.title}`}
                 onClick={(event) => {
                   event.stopPropagation()
-                  onRequestClose(session, 'terminate')
+                  onRequestClose(session)
                 }}
               >
                 <X size={12} />
@@ -159,7 +140,7 @@ export function TerminalTabs({
       <Tooltip label="New terminal (Ctrl+Shift+T)" placement="bottom">
         <button
           type="button"
-          className="btn btn--ghost btn--icon btn--sm"
+          className="btn btn--ghost btn--icon btn--sm tabs__new"
           aria-label="New terminal"
           onClick={onCreate}
         >

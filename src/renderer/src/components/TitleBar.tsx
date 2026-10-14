@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Copy, Minus, Square, X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { Logo } from './Logo'
 
 /** Custom window chrome with working minimise / maximise / close controls. */
 export function TitleBar({ contextLabel }: { contextLabel?: string }): ReactNode {
@@ -21,7 +22,7 @@ export function TitleBar({ contextLabel }: { contextLabel?: string }): ReactNode
   return (
     <header className="titlebar">
       <div className="titlebar__brand">
-        <span className="titlebar__mark" aria-hidden="true" />
+        <Logo size={20} className="titlebar__logo" />
         <span className="titlebar__name">VoxTerm</span>
         {contextLabel ? <span className="titlebar__context">{contextLabel}</span> : null}
       </div>

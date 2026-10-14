@@ -5,12 +5,8 @@ import type { SecretsStatus, Settings } from '@shared/schemas'
 import type {
   ActivityEvent,
   AgentProfileStatus,
-  AttachExternalResult,
-  CloseSessionMode,
   CloseSessionResult,
   CreateTerminalOptions,
-  ExternalProviderInfo,
-  ExternalSessionInfo,
   OperationResult,
   SystemInfo,
   TerminalSessionInfo
@@ -63,9 +59,7 @@ const api: VoxTermAPI = {
     input: (sessionId, data) => invoke<OperationResult>(IPC.terminalInput, { sessionId, data }),
     resize: (sessionId, cols, rows) => invoke<OperationResult>(IPC.terminalResize, { sessionId, cols, rows }),
     rename: (sessionId, title) => invoke<OperationResult>(IPC.terminalRename, { sessionId, title }),
-    close: (sessionId, mode: CloseSessionMode) =>
-      invoke<CloseSessionResult>(IPC.terminalClose, { sessionId, mode }),
-    terminate: (sessionId) => invoke<CloseSessionResult>(IPC.terminalTerminate, { sessionId }),
+    close: (sessionId) => invoke<CloseSessionResult>(IPC.terminalClose, sessionId),
     snapshot: (sessionId) => invoke<string>(IPC.terminalSnapshot, sessionId),
     onData: (listener) => on(IPC_EVENTS.terminalData, listener),
     onExit: (listener) => on(IPC_EVENTS.terminalExit, listener),
@@ -77,16 +71,6 @@ const api: VoxTermAPI = {
     list: () => invoke<AgentProfileStatus[]>(IPC.agentsList),
     save: (profile) => invoke<AgentProfileStatus[]>(IPC.agentsSave, profile),
     delete: (id) => invoke<AgentProfileStatus[]>(IPC.agentsDelete, { id })
-  },
-  external: {
-    listProviders: () => invoke<ExternalProviderInfo[]>(IPC.externalListProviders),
-    list: () => invoke<ExternalSessionInfo[]>(IPC.externalList),
-    refresh: () => invoke<ExternalSessionInfo[]>(IPC.externalRefresh),
-    attach: (id) => invoke<AttachExternalResult>(IPC.externalAttach, id),
-    detach: (id) => invoke<OperationResult>(IPC.externalDetach, id),
-    terminate: (id) => invoke<OperationResult>(IPC.externalTerminate, id),
-    status: (id) => invoke<Awaited<ReturnType<VoxTermAPI['external']['status']>>>(IPC.externalStatus, id),
-    onChanged: (listener) => on<ExternalSessionInfo[]>(IPC_EVENTS.externalChanged, listener)
   },
   activity: {
     list: () => invoke<ActivityEvent[]>(IPC.activityList),
