@@ -744,6 +744,9 @@ textarea.input {
   box-shadow: var(--shadow-md);
   pointer-events: none;
   white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   animation: tooltip-in var(--dur-fast) var(--ease-out);
 }
 @keyframes tooltip-in {

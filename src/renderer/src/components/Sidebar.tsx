@@ -21,7 +21,7 @@ export function Sidebar({ active, onNavigate }: SidebarProps): ReactNode {
     const Icon = item.icon
     const isActive = item.key === active
     return (
-      <Tooltip key={item.key} label={`${item.label} — ${item.description}`} placement="bottom">
+      <Tooltip key={item.key} label={item.label} placement="right">
         <button
           type="button"
           className={isActive ? 'nav-item nav-item--active' : 'nav-item'}
