@@ -19,6 +19,12 @@ export interface RecordActivityInput {
 }
 
 const ABSOLUTE_MAX = 5000
+/**
+ * Identical consecutive events inside this window are merged into one row with
+ * a repeat count instead of being logged separately (e.g. every slider change
+ * used to produce its own "Settings updated" row).
+ */
+const MERGE_WINDOW_MS = 2 * 60 * 1000
 
 /**
  * Bounded, persisted history of genuine application events. Only small,
@@ -69,15 +75,40 @@ export class ActivityLog {
   }
 
   record(input: RecordActivityInput): ActivityEvent {
+    const timestamp = Date.now()
+    const last = this.events[this.events.length - 1]
+    if (
+      last &&
+      last.category === input.category &&
+      last.type === input.type &&
+      last.message === input.message &&
+      (last.level ?? 'info') === (input.level ?? 'info') &&
+      timestamp - last.timestamp < MERGE_WINDOW_MS
+    ) {
+      // Coalesce: the newest occurrence updates the row instead of adding one.
+      last.timestamp = timestamp
+      last.count = (last.count ?? 1) + 1
+      this.scheduleWrite()
+      for (const listener of this.listeners) {
+        try {
+          listener(last)
+        } catch {
+          /* a broken listener must not break logging */
+        }
+      }
+      return last
+    }
+
     const event: ActivityEvent = {
       id: randomUUID(),
-      timestamp: Date.now(),
+      timestamp,
       category: input.category,
       type: input.type,
       message: input.message,
       level: input.level ?? 'info',
       details: input.details ? sanitizeDetails(input.details) : undefined
     }
+    // Keys are stable; `count` is only ever written by the coalescing branch above.
     this.events.push(event)
     if (this.events.length > ABSOLUTE_MAX) {
       this.events = this.events.slice(-ABSOLUTE_MAX)

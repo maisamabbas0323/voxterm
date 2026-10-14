@@ -316,6 +316,15 @@ ul {
 .page__body--flush {
   padding: 0;
 }
+/*
+ * Flex containers shrink their children to fit instead of overflowing, which
+ * silently clipped tall cards (the agents list was crushed by overflow:hidden).
+ * Page-body children must keep their natural height and let this scroll
+ * container scroll instead.
+ */
+.page__body.stack > * {
+  flex-shrink: 0;
+}
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -1166,6 +1175,19 @@ textarea.input {
   line-height: 16px;
   white-space: nowrap;
 }
+/* Repeat counter for merged activity rows, e.g. "x6". */
+.list__count {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
 .list__level {
   width: 8px;
   height: 8px;
@@ -1338,6 +1360,22 @@ textarea.input {
   font-size: var(--fs-xl);
   font-weight: 600;
 }
+/* "Coming soon" marker for sections whose runtime is not built yet. */
+.settings__soon {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 15px;
+  white-space: nowrap;
+  vertical-align: 2px;
+}
 .settings__section-desc {
   font-size: var(--fs-sm);
   color: var(--text-muted);
@@ -1356,6 +1394,13 @@ textarea.input {
   grid-template-columns: minmax(0, 1fr) minmax(0, 260px);
   gap: var(--space-4);
   align-items: start;
+}
+.settings__field--inactive {
+  opacity: 0.55;
+}
+.settings__field--inactive .select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 .settings__field--stacked {
   grid-template-columns: 1fr;

@@ -123,8 +123,18 @@ function reducer(state: State, action: Action): State {
       return { ...state, activeSessionId: action.id }
     case 'activity':
       return { ...state, activity: action.events }
-    case 'activity-add':
-      return { ...state, activity: [...state.activity, action.event].slice(-2000) }
+    case 'activity-add': {
+      // Coalesced events are re-broadcast with the same id; replace in place so
+      // the merged row updates instead of appending a duplicate.
+      const events = [...state.activity]
+      const last = events[events.length - 1]
+      if (last && last.id === action.event.id) {
+        events[events.length - 1] = action.event
+      } else {
+        events.push(action.event)
+      }
+      return { ...state, activity: events.slice(-2000) }
+    }
     case 'system':
       return { ...state, system: action.system }
     case 'agents':

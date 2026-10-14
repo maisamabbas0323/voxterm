@@ -37,6 +37,13 @@ const SECTION_ICONS: Record<SettingsSection, LucideIcon> = {
   system: Cpu
 }
 
+/**
+ * Sections whose runtime feature is not built yet. A section appearing here is
+ * badged "coming soon" in the rail so the UI never pretends a feature exists.
+ * Remove a key when its milestone ships.
+ */
+const SECTION_COMING_SOON = new Set<SettingsSection>(['voice', 'prompts', 'announcements'])
+
 /** A single settings row: description on the left, control on the right. */
 function Row({
   label,
@@ -264,6 +271,7 @@ export function SettingsPage(): ReactNode {
               >
                 <Icon size={15} />
                 {SECTION_LABELS[key]}
+                {SECTION_COMING_SOON.has(key) ? <span className="settings__soon">soon</span> : null}
               </button>
             )
           })}
@@ -381,10 +389,16 @@ export function SettingsPage(): ReactNode {
                 />
                 <Row
                   label="Animation intensity"
+                  hint={
+                    settings.appearance.reducedMotion
+                      ? 'Reduce motion is on — this setting is inactive.'
+                      : undefined
+                  }
                   control={
                     <select
                       className="select"
                       value={settings.appearance.animationIntensity}
+                      disabled={settings.appearance.reducedMotion}
                       onChange={(event) =>
                         appearance({
                           animationIntensity: event.target.value as Settings['appearance']['animationIntensity']
@@ -536,7 +550,10 @@ export function SettingsPage(): ReactNode {
           {section === 'voice' ? (
             <>
               <div className="settings__section-head">
-                <h2 className="settings__section-title">Voice</h2>
+                <h2 className="settings__section-title">
+                  Voice
+                  {SECTION_COMING_SOON.has('voice') ? <span className="settings__soon">coming soon</span> : null}
+                </h2>
                 <p className="settings__section-desc">Speech input and local transcription preferences.</p>
               </div>
               <Notice tone="warning" icon={<ShieldCheck size={15} />}>
@@ -632,7 +649,10 @@ export function SettingsPage(): ReactNode {
           {section === 'prompts' ? (
             <>
               <div className="settings__section-head">
-                <h2 className="settings__section-title">Prompt providers</h2>
+                <h2 className="settings__section-title">
+                  Prompt providers
+                  {SECTION_COMING_SOON.has('prompts') ? <span className="settings__soon">coming soon</span> : null}
+                </h2>
                 <p className="settings__section-desc">
                   Where natural-language prompts may be sent. Local-only is the safe default.
                 </p>
@@ -705,7 +725,12 @@ export function SettingsPage(): ReactNode {
           {section === 'announcements' ? (
             <>
               <div className="settings__section-head">
-                <h2 className="settings__section-title">Announcements</h2>
+                <h2 className="settings__section-title">
+                  Announcements
+                  {SECTION_COMING_SOON.has('announcements') ? (
+                    <span className="settings__soon">coming soon</span>
+                  ) : null}
+                </h2>
                 <p className="settings__section-desc">Spoken notifications for terminal events.</p>
               </div>
               <Notice tone="warning" icon={<ShieldCheck size={15} />}>

@@ -15,7 +15,7 @@ export const appearanceSettingsSchema = z.object({
     '"JetBrains Mono", "JetBrainsMono Nerd Font", "Fira Code", monospace'
   ),
   terminalFontSize: z.number().int().min(8).max(32).default(13),
-  terminalLineHeight: z.number().min(1).max(2.5).default(1.3),
+  terminalLineHeight: z.number().min(1).max(2.5).default(1.2),
   cursorStyle: z.enum(['block', 'underline', 'bar']).default('block'),
   cursorBlink: z.boolean().default(true),
   reducedMotion: z.boolean().default(false),

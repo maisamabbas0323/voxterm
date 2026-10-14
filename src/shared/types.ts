@@ -105,6 +105,11 @@ export interface ActivityEvent {
   type: string
   message: string
   level: ActivityLevel
+  /**
+   * When identical consecutive events are coalesced (e.g. slider changes), this
+   * counts how many occurrences the row represents.
+   */
+  count?: number
   /** Small, non-sensitive metadata only. */
   details?: Record<string, string | number | boolean | null>
 }

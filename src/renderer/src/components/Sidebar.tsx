@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { NAV_ITEMS, type NavItem, type NavKey } from './nav'
+import { Tooltip } from './Tooltip'
 
 interface SidebarProps {
   active: NavKey
@@ -20,18 +21,19 @@ export function Sidebar({ active, onNavigate }: SidebarProps): ReactNode {
     const Icon = item.icon
     const isActive = item.key === active
     return (
-      <button
-        key={item.key}
-        type="button"
-        className={isActive ? 'nav-item nav-item--active' : 'nav-item'}
-        aria-current={isActive ? 'page' : undefined}
-        aria-label={item.label}
-        onClick={() => onNavigate(item.key)}
-      >
-        <span className="nav-item__icon">
-          <Icon size={19} strokeWidth={1.8} />
-        </span>
-      </button>
+      <Tooltip key={item.key} label={`${item.label} — ${item.description}`} placement="bottom">
+        <button
+          type="button"
+          className={isActive ? 'nav-item nav-item--active' : 'nav-item'}
+          aria-current={isActive ? 'page' : undefined}
+          aria-label={item.label}
+          onClick={() => onNavigate(item.key)}
+        >
+          <span className="nav-item__icon">
+            <Icon size={19} strokeWidth={1.8} />
+          </span>
+        </button>
+      </Tooltip>
     )
   }
 

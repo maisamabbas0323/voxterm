@@ -176,7 +176,10 @@ export function ActivityPage(): ReactNode {
                       <EventIcon level={event.level} />
                     </span>
                     <div className="grow">
-                      <div className="list__primary">{event.message}</div>
+                      <div className="list__primary">
+                        {event.message}
+                        {event.count && event.count > 1 ? <span className="list__count">x{event.count}</span> : null}
+                      </div>
                       <div className="list__secondary">
                         {event.category} · {event.type}
                         {event.details
