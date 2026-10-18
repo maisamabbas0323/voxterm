@@ -72,6 +72,6 @@ export function systemInfoToText(system: SystemInfo): string {
     `Host ${system.hostname}`,
     `Default shell ${system.defaultShell}`,
     `node-pty ${system.terminalBackend.nodePty ? 'ready' : `unavailable${system.terminalBackend.error ? `: ${system.terminalBackend.error}` : ''}`}${system.terminalBackend.ptyVersion ? ` (${system.terminalBackend.ptyVersion})` : ''}`,
-    `Transcription ${system.whisper.available ? 'ready' : 'not set up'}`
+    `Speech-to-text ${system.stt.configured ? 'ready' : 'not configured'}${system.stt.detail ? ` — ${system.stt.detail}` : ''}`
   ].join('\n')
 }

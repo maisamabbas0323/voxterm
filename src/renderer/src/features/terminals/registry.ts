@@ -31,7 +31,6 @@ const THEME: ITheme = {
 
 const FONT_SIZE_MIN = 8
 const FONT_SIZE_MAX = 48
-const DEFAULT_FONT_SIZE = 13
 const ZOOM_MIN = -24
 const ZOOM_MAX = 24
 
@@ -40,7 +39,7 @@ const ZOOM_MAX = 24
  * surrounding interface. The configured preference is the base; the transient
  * zoom step is layered on top and clamped to a readable range.
  */
-function resolveFontSize(base: number, zoom: number): number {
+export function resolveFontSize(base: number, zoom: number): number {
   return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(base + zoom)))
 }
 
@@ -189,6 +188,20 @@ export class TerminalController {
     return this.term.getSelection()
   }
 
+  /**
+   * Insert approved text into the shell.
+   *
+   * `paste()` goes through xterm's bracketed-paste path, so multi-line text is
+   * inserted literally and cannot execute on its own. A trailing Enter is sent
+   * via `input()` — a genuine Return keystroke, not a literal newline inside a
+   * paste block — and only ever when the caller explicitly asks for it.
+   */
+  insertText(text: string, execute: boolean): void {
+    if (text) this.term.paste(text)
+    if (execute) this.term.input('\r')
+    this.term.focus()
+  }
+
   findNext(query: string): boolean {
     return this.search.findNext(query, { caseSensitive: false })
   }
@@ -248,11 +261,6 @@ class TerminalRegistry {
   /** Transient zoom step in pixels, layered over the configured font size. */
   getZoom(): number {
     return this.zoom
-  }
-
-  /** The font size the terminal is actually rendering at. */
-  effectiveFontSize(): number {
-    return resolveFontSize(this.appearance?.appearance.terminalFontSize ?? DEFAULT_FONT_SIZE, this.zoom)
   }
 
   zoomBy(delta: number): void {
@@ -322,6 +330,17 @@ class TerminalRegistry {
 
   focus(sessionId: string): void {
     this.controllers.get(sessionId)?.focus()
+  }
+
+  /**
+   * Insert text into a session's shell. Returns false when the session has no
+   * live terminal, so the caller can report that instead of failing silently.
+   */
+  insertText(sessionId: string, text: string, execute: boolean): boolean {
+    const controller = this.controllers.get(sessionId)
+    if (!controller) return false
+    controller.insertText(text, execute)
+    return true
   }
 
   refit(sessionId: string): void {

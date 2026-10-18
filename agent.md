@@ -9,9 +9,10 @@ Prompt 1 of 5 delivered the **Electron foundation**: a real desktop app with rea
 OS terminals, honest session semantics, validated settings persistence, an
 activity log and a hardened process model. A follow-up pass removed the
 external-session integrations entirely, fixed the collapsed-sidebar icon bug,
-introduced the "V" brand mark, and made every page responsive. Voice capture,
-prompt generation and spoken announcements are **scaffolded but not runtime-active**
-(see `progress.md` for the honest status).
+introduced the "V" brand mark, and made every page responsive. Later passes added
+real speech-to-text dictation (ElevenLabs), Gemma prompt enhancement
+(Ollama/Google), spoken announcements and tmux/screen attach — see `progress.md`
+for the honest status.
 
 ---
 
@@ -75,7 +76,7 @@ normal Kali/desktop install the sandbox works and should be left on.
 │  terminals/      TerminalSessionManager (owns every node-pty instance)                │
 │  agents/         AgentProfileStore + real executable detection                        │
 │  ipc/            One handler module per domain; every payload Zod-validated           │
-│  system/         SystemInfo aggregation (versions, PATH tools, whisper readiness)     │
+│  system/         SystemInfo aggregation (versions, PATH tools, STT readiness)         │
 └───────────────────────────────────────────┬───────────────────────────────────────────┘
                     contextBridge (typed, narrow) │ ipcRenderer.invoke / .on
 ┌───────────────────────────────────────────┴───────────────────────────────────────────┐
@@ -85,7 +86,7 @@ normal Kali/desktop install the sandbox works and should be left on.
 │    state/store.tsx        app store: settings, sessions, agents, activity, nav, toasts  │
 │    features/terminals/    xterm controller registry + surfaces + tabs                  │
 │    components/            TitleBar · Sidebar · Logo · Modal · Toasts · primitives       │
-│    pages/                 Workspace · Terminals · Voice · Activity · Settings          │
+│    pages/                 Workspace · Terminals · Activity · Settings                  │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -209,10 +210,11 @@ Guardrails:
   re-validation; invalid patches are rejected and the previous settings are kept.
 - Writes are **atomic** (temp file + rename) and files are `0600` in a `0700`
   directory (`util/jsonStore.ts`).
-- **Secrets** (`openrouter`, `google`, `elevenlabs`) live in a separate
+- **Secrets** (`google`, `elevenlabs`) live in a separate
   `secrets.json`. Only their *presence* (`SecretsStatus`) crosses IPC — values
   are never returned to the renderer, never logged, and are read in main only via
-  `getSecret()`.
+  `getSecret()`. A `.env` file loaded at startup provides the same values without
+  copying them into `secrets.json`; a value stored through the UI always wins.
 - The activity log stores **small, non-sensitive metadata only**: never terminal
   output, never environment variables, never secrets. Retention is bounded
   (default 500, max 5000).
@@ -254,13 +256,14 @@ prefer adding one more narrow method to the preload bridge over widening the API
   `global.css`. Two-up layouts collapse, the Settings rail becomes a horizontal
   scroller and the Workspace tooling panel is dropped on narrow windows.
 - **No fake buttons, dead controls or placeholder session data.** If something is
-  not wired up, disable it and label it honestly (see the Voice page notice).
+  not wired up, disable it and label it honestly (see the Voice section notice).
 - No horizontal overflow; the window is frameless with a custom title bar
   (`components/TitleBar.tsx`) and window controls over IPC.
 - Keyboard shortcuts: `Ctrl+Shift+T` new terminal, `Ctrl+Shift+W` close tab,
-  `Ctrl+Shift+F` find, `Ctrl+Tab`/`Ctrl+Shift+Tab` cycle, `Ctrl+1..9` jump.
-  `App.tsx` dispatches window `CustomEvent`s (`voxterm:find`,
-  `voxterm:close-active`) after navigating so the terminals page can react.
+  `Ctrl+F` find (Terminals view only), `Ctrl+Tab`/`Ctrl+Shift+Tab` cycle,
+  `Ctrl+1..9` jump. `App.tsx` dispatches window `CustomEvent`s (`voxterm:find`,
+  `voxterm:close-active`) after handling a key so the terminals page can react.
+  Find is deliberately scoped to the Terminals view and never consumed elsewhere.
 
 ## 10. Conventions & gotchas
 
@@ -285,12 +288,14 @@ prefer adding one more narrow method to the preload bridge over widening the API
 
 ## 11. Extension points for later milestones
 
-- **Voice (prompt 2+):** `voice`/`announcements` settings, `SystemInfo.whisper`
-  readiness, and the Voice page already exist. Wire a real capture → local Whisper
-  → prompt-review → send-to-session pipeline. Keep everything local unless the
-  user explicitly enables a cloud provider.
-- **Prompts:** `prompts` settings define provider priority (ollama → openrouter →
-  google) and a `localOnly` default. Prompt generation should honour it.
+- **Voice:** capture happens in the renderer and is transcribed by ElevenLabs
+  (`voice/elevenlabsStt.ts`). The finished transcript is auto-enhanced (optional)
+  and inserted into the active terminal — never executed. The Voice controls live
+  in Settings; there is no separate Voice page. Keep cloud transcription gated by
+  a configured key and never log transcript text.
+- **Prompts:** `prompts` settings define provider priority (ollama → google) and a
+  `localOnly` default. Prompt generation honours it. Google always targets the
+  official endpoint with the API key — there is no base-URL field for it.
 - **Agent adapters:** flip `AgentCapabilities` per agent and add adapters in the
   `agents/` module. Launch stays "type it into the shell" — adapters only add
   prompt/event handling on top.

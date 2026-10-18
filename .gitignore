@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Locally built native runtimes (for example node-pty rebuilds); not committed
+.deps/
+
 # Build output
 out/
 dist/

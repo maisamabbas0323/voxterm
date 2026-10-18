@@ -1,32 +1,23 @@
 import { app } from 'electron'
-import { access } from 'node:fs/promises'
-import { constants } from 'node:fs'
-import { hostname, release } from 'node:os'
-import type { SystemInfo, ToolAvailability } from '@shared/types'
+import { release, hostname } from 'node:os'
+import type { SttRuntimeInfo, SystemInfo, ToolAvailability } from '@shared/types'
 import type { Settings } from '@shared/schemas'
-import { expandHome, resolveShell } from '../terminals/shell'
+import { resolveShell } from '../terminals/shell'
 import { detectToolVersion, findExecutable } from '../util/exec'
+import { DEFAULT_STT_MODEL } from '../voice/elevenlabsStt'
 import { BUILTIN_AGENT_PROFILES } from '@shared/agents'
 
 export interface SystemInfoDeps {
   resolvePath: () => Promise<string>
   getSettings: () => Settings
+  /** Whether an ElevenLabs key is available (stored or from the environment). */
+  hasSttKey: () => boolean
 }
 
 async function toolAvailability(name: string, path: string, versionArgs: string[] = ['--version']): Promise<ToolAvailability> {
   const resolved = await findExecutable(name, path)
   const version = resolved ? await detectToolVersion(resolved, versionArgs) : null
   return { name, path: resolved, available: Boolean(resolved), version }
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  if (!path) return false
-  try {
-    await access(expandHome(path), constants.F_OK)
-    return true
-  } catch {
-    return false
-  }
 }
 
 function ptyStatus(): { ok: boolean; version: string | null; error?: string } {
@@ -59,10 +50,9 @@ export async function buildSystemInfo(deps: SystemInfoDeps): Promise<SystemInfo>
   ])
   const resolvedShell = await resolveShell(settings.terminal.defaultShell, pathValue)
 
-  const [tmux, screen, whisperBinary] = await Promise.all([
+  const [tmux, screen] = await Promise.all([
     toolAvailability('tmux', pathValue, ['-V']),
-    toolAvailability('screen', pathValue, ['--version']),
-    findExecutable('whisper.cpp', pathValue).then(async (cpp) => cpp ?? (await findExecutable('whisper', pathValue)))
+    toolAvailability('screen', pathValue, ['--version'])
   ])
 
   const agents = await Promise.all(
@@ -73,8 +63,16 @@ export async function buildSystemInfo(deps: SystemInfoDeps): Promise<SystemInfo>
     })
   )
 
-  const modelPath = settings.voice.whisperModelPath.trim()
-  const modelPresent = await fileExists(modelPath)
+  // Speech-to-text readiness comes from the same source the voice controller
+  // uses, so System Info and Settings can never disagree.
+  const stt: SttRuntimeInfo = {
+    provider: 'elevenlabs',
+    configured: deps.hasSttKey(),
+    modelId: settings.voice.sttModelId.trim() || DEFAULT_STT_MODEL,
+    detail: deps.hasSttKey()
+      ? 'ElevenLabs speech-to-text is configured.'
+      : 'No ElevenLabs API key is configured.'
+  }
 
   return {
     appVersion: app.getVersion(),
@@ -91,15 +89,7 @@ export async function buildSystemInfo(deps: SystemInfoDeps): Promise<SystemInfo>
     tmux,
     screen,
     agents,
-    whisper: {
-      provider: settings.voice.transcriptionProvider,
-      binaryPath: whisperBinary,
-      modelPath: modelPath || null,
-      modelPresent,
-      // Transcription is not implemented until the next milestone; readiness
-      // reflects only whether the underlying pieces are present.
-      available: Boolean(whisperBinary) && modelPresent
-    },
+    stt,
     terminalBackend: (() => {
       const status = ptyStatus()
       return { nodePty: status.ok, ptyVersion: status.version, error: status.error }

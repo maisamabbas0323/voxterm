@@ -44,8 +44,8 @@ export function createMainWindow(callbacks: WindowCallbacks = {}): BrowserWindow
   const window = new BrowserWindow({
     width: 1320,
     height: 860,
-    minWidth: 880,
-    minHeight: 560,
+    minWidth: 680,
+    minHeight: 520,
     show: false,
     frame: false,
     backgroundColor: '#08080a',

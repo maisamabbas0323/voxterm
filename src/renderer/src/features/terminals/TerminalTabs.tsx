@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Plus, X } from 'lucide-react'
+import { Link2, Plus, X } from 'lucide-react'
 import type { TerminalSessionInfo } from '@shared/types'
 import { StatusDot } from '../../components/primitives'
 import { ContextMenu, type MenuEntry } from '../../components/ContextMenu'
@@ -13,6 +13,8 @@ interface TerminalTabsProps {
   onRequestClose: (session: TerminalSessionInfo) => void
   onRename: (id: string, title: string) => void
   onCreate: () => void
+  /** Open the external-session picker. */
+  onAttach: () => void
 }
 
 function dotState(session: TerminalSessionInfo): 'running' | 'starting' | 'exited' {
@@ -32,7 +34,8 @@ export function TerminalTabs({
   onSelect,
   onRequestClose,
   onRename,
-  onCreate
+  onCreate,
+  onAttach
 }: TerminalTabsProps): ReactNode {
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; session: TerminalSessionInfo } | null>(null)
@@ -162,6 +165,16 @@ export function TerminalTabs({
           )
         })}
       </div>
+      <Tooltip label="Attach to tmux or screen session" placement="bottom">
+        <button
+          type="button"
+          className="btn btn--ghost btn--icon btn--sm tabs__new"
+          aria-label="Attach to external session"
+          onClick={onAttach}
+        >
+          <Link2 size={15} />
+        </button>
+      </Tooltip>
       <Tooltip label="New terminal (Ctrl+Shift+T)" placement="bottom">
         <button
           type="button"

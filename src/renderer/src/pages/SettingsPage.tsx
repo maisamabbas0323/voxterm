@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Cpu,
   KeyRound,
+  Link2,
   Mic,
   Palette,
   RotateCcw,
@@ -11,7 +12,15 @@ import {
   Volume2,
   Wand2
 } from 'lucide-react'
-import { SETTINGS_SECTIONS, type SecretSlot, type Settings, type SettingsSection } from '@shared/schemas'
+import {
+  ANNOUNCEMENT_CATEGORIES,
+  SETTINGS_SECTIONS,
+  type AnnouncementCategory,
+  type SecretSlot,
+  type Settings,
+  type SettingsSection
+} from '@shared/schemas'
+import type { PromptProviderStatus } from '@shared/types'
 import { useApp } from '../state/store'
 import { Notice, Switch } from '../components/primitives'
 import { shortenPath } from '../lib/format'
@@ -23,6 +32,7 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   voice: 'Voice',
   prompts: 'Prompt providers',
   announcements: 'Announcements',
+  external: 'External sessions',
   privacy: 'Privacy',
   system: 'System & credentials'
 }
@@ -33,16 +43,33 @@ const SECTION_ICONS: Record<SettingsSection, LucideIcon> = {
   voice: Mic,
   prompts: Wand2,
   announcements: Volume2,
+  external: Link2,
   privacy: ShieldCheck,
   system: Cpu
 }
 
-/**
- * Sections whose runtime feature is not built yet. A section appearing here is
- * badged "coming soon" in the rail so the UI never pretends a feature exists.
- * Remove a key when its milestone ships.
- */
-const SECTION_COMING_SOON = new Set<SettingsSection>(['voice', 'prompts', 'announcements'])
+/** Plain-language labels for the events we can genuinely announce. */
+const ANNOUNCEMENT_LABELS: Record<AnnouncementCategory, string> = {
+  'session-exit': 'Terminal exits',
+  error: 'Errors',
+  'agent-event': 'Agent changes'
+}
+
+const SECTION_PROVIDER_LABELS = {
+  ollama: 'Ollama',
+  google: 'Google AI Studio'
+} as const
+
+/** Provider ids in a stable display order for the priority pickers. */
+const PROMPT_PROVIDER_IDS = ['ollama', 'google'] as const
+
+/** Hosted Gemma models offered by the Google Generative Language API. */
+const GOOGLE_GEMMA_MODELS: readonly string[] = [
+  'gemma-4-31b-it',
+  'gemma-4-26b-a4b-it',
+  'gemma-3-27b-it',
+  'gemma-3-12b-it'
+]
 
 /** A single settings row: description on the left, control on the right. */
 function Row({
@@ -212,6 +239,25 @@ export function SettingsPage(): ReactNode {
   const [query, setQuery] = useState('')
   const settings = state.settings
 
+  // Live provider reachability, read once when the page mounts. This is the
+  // same probe the enhance call performs, so what is listed here is what the
+  // voice pipeline would actually try.
+  const [providerStatus, setProviderStatus] = useState<PromptProviderStatus[]>([])
+  useEffect(() => {
+    let cancelled = false
+    void window.voxterm.prompts
+      .status()
+      .then((status) => {
+        if (!cancelled) setProviderStatus(status)
+      })
+      .catch(() => {
+        if (!cancelled) setProviderStatus([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const visibleSections = useMemo(() => {
     if (!query.trim()) return SETTINGS_SECTIONS
     const needle = query.trim().toLowerCase()
@@ -240,6 +286,16 @@ export function SettingsPage(): ReactNode {
   const announcements = (patch: Partial<Settings['announcements']>): void =>
     update({ announcements: patch as Settings['announcements'] })
   const privacy = (patch: Partial<Settings['privacy']>): void => update({ privacy: patch as Settings['privacy'] })
+  const external = (patch: Partial<Settings['external']>): void => update({ external: patch as Settings['external'] })
+
+  const announceTest = async (): Promise<void> => {
+    try {
+      await window.voxterm.announcements.test()
+      actions.toast('Announcement sent.', 'success')
+    } catch (error) {
+      actions.toast(error instanceof Error ? error.message : 'Announcement failed.', 'error')
+    }
+  }
 
   return (
     <div className="settings">
@@ -271,7 +327,6 @@ export function SettingsPage(): ReactNode {
               >
                 <Icon size={15} />
                 {SECTION_LABELS[key]}
-                {SECTION_COMING_SOON.has(key) ? <span className="settings__soon">soon</span> : null}
               </button>
             )
           })}
@@ -550,15 +605,15 @@ export function SettingsPage(): ReactNode {
           {section === 'voice' ? (
             <>
               <div className="settings__section-head">
-                <h2 className="settings__section-title">
-                  Voice
-                  {SECTION_COMING_SOON.has('voice') ? <span className="settings__soon">coming soon</span> : null}
-                </h2>
-                <p className="settings__section-desc">Speech input and local transcription preferences.</p>
+                <h2 className="settings__section-title">Voice</h2>
+                <p className="settings__section-desc">
+                  Microphone capture and ElevenLabs speech-to-text. Recordings are sent to ElevenLabs for transcription.
+                </p>
               </div>
-              <Notice tone="warning" icon={<ShieldCheck size={15} />}>
-                The voice runtime is not implemented in this build. These values are stored now and will apply
-                when the microphone pipeline ships.
+              <Notice tone="info" icon={<ShieldCheck size={15} />}>
+                Recording starts only while the Terminals view is open and you hold the push-to-talk hotkey. The
+                microphone stays closed at all other times. Your recording is sent to ElevenLabs for
+                transcription, so the speech-to-text key must be configured.
               </Notice>
               <div className="settings__group">
                 <Row
@@ -572,8 +627,41 @@ export function SettingsPage(): ReactNode {
                   }
                 />
                 <Row
+                  label="Only on the Terminals view"
+                  hint="Recommended. Prevents the hotkey from opening the microphone anywhere else."
+                  control={
+                    <Switch
+                      label=""
+                      checked={settings.voice.terminalOnly}
+                      onChange={(value) => voice({ terminalOnly: value })}
+                    />
+                  }
+                />
+                <Row
+                  label="Auto-enhance with Gemma"
+                  hint="Rewrite the transcript with the configured provider before inserting it."
+                  control={
+                    <Switch
+                      label=""
+                      checked={settings.voice.autoEnhance}
+                      onChange={(value) => voice({ autoEnhance: value })}
+                    />
+                  }
+                />
+                <Row
+                  label="Auto-insert into the active terminal"
+                  hint="Types the finished text into the focused terminal. It is never run automatically."
+                  control={
+                    <Switch
+                      label=""
+                      checked={settings.voice.autoInsert}
+                      onChange={(value) => voice({ autoInsert: value })}
+                    />
+                  }
+                />
+                <Row
                   label="Push-to-talk hotkey"
-                  hint="Letters, digits, + and - only (e.g. Ctrl+Alt+Space)."
+                  hint="Letters, digits, + and - only (e.g. Ctrl+Alt+Space). Ctrl+F is reserved for find-in-terminal."
                   control={
                     <DraftInput
                       value={settings.voice.hotkey}
@@ -584,41 +672,29 @@ export function SettingsPage(): ReactNode {
                   }
                 />
                 <Row
-                  label="Push-to-talk"
-                  hint="Hold the hotkey to record; release to transcribe."
+                  label="Hold to talk"
+                  hint={
+                    state.voice?.hotkey.mode === 'toggle'
+                      ? 'Your platform only supports a toggle hotkey, so this switch is disabled.'
+                      : 'Release the hotkey to stop recording and transcribe.'
+                  }
                   control={
                     <Switch
                       label=""
                       checked={settings.voice.pushToTalk}
+                      disabled={state.voice?.hotkey.mode === 'toggle'}
                       onChange={(value) => voice({ pushToTalk: value })}
                     />
                   }
                 />
                 <Row
-                  label="Transcription provider"
-                  control={
-                    <select
-                      className="select"
-                      value={settings.voice.transcriptionProvider}
-                      onChange={(event) =>
-                        voice({
-                          transcriptionProvider: event.target
-                            .value as Settings['voice']['transcriptionProvider']
-                        })
-                      }
-                    >
-                      <option value="none">None</option>
-                      <option value="whisper-local">Whisper (local)</option>
-                    </select>
-                  }
-                />
-                <Row
-                  label="Whisper model path"
+                  label="Speech-to-text model"
+                  hint="ElevenLabs model id. “scribe_v1” is the recommended default."
                   control={
                     <DraftInput
-                      value={settings.voice.whisperModelPath}
-                      placeholder="/path/to/model.bin"
-                      onCommit={(value) => voice({ whisperModelPath: value.trim() })}
+                      value={settings.voice.sttModelId}
+                      placeholder="scribe_v1"
+                      onCommit={(value) => voice({ sttModelId: value.trim() || 'scribe_v1' })}
                     />
                   }
                 />
@@ -633,38 +709,47 @@ export function SettingsPage(): ReactNode {
                   }
                 />
                 <Row
-                  label="Review transcription before sending"
+                  label="Minimum recording length"
+                  hint="Recordings shorter than this are discarded instead of transcribed."
                   control={
-                    <Switch
-                      label=""
-                      checked={settings.voice.reviewBeforeSend}
-                      onChange={(value) => voice({ reviewBeforeSend: value })}
+                    <input
+                      type="number"
+                      className="input"
+                      min={300}
+                      max={10000}
+                      step={100}
+                      value={settings.voice.minRecordingMs}
+                      onChange={(event) => {
+                        const next = Number(event.target.value)
+                        if (Number.isFinite(next)) voice({ minRecordingMs: Math.round(next) })
+                      }}
                     />
                   }
                 />
               </div>
+              {state.voice?.stt ? (
+                <div className="settings__note">Speech-to-text: {state.voice.stt.detail}</div>
+              ) : null}
             </>
           ) : null}
 
           {section === 'prompts' ? (
             <>
               <div className="settings__section-head">
-                <h2 className="settings__section-title">
-                  Prompt providers
-                  {SECTION_COMING_SOON.has('prompts') ? <span className="settings__soon">coming soon</span> : null}
-                </h2>
+                <h2 className="settings__section-title">Prompt providers</h2>
                 <p className="settings__section-desc">
-                  Where natural-language prompts may be sent. Local-only is the safe default.
+                  Providers are tried in order until one answers. Local-only blocks every cloud call.
                 </p>
               </div>
-              <Notice tone="warning" icon={<ShieldCheck size={15} />}>
-                Prompt generation is part of a later milestone. Provider settings are stored now; no requests
-                are made by this build.
+              <Notice tone={settings.prompts.localOnly ? 'info' : 'warning'} icon={<ShieldCheck size={15} />}>
+                {settings.prompts.localOnly
+                  ? 'Local-only is on: only Ollama may be called, and cloud requests are refused even if enabled below.'
+                  : 'Local-only is off: an enabled cloud provider may receive the transcript you are editing when you press Enhance.'}
               </Notice>
               <div className="settings__group">
                 <Row
                   label="Local-only mode"
-                  hint="Prevents any prompt from leaving the machine."
+                  hint="Blocks all cloud providers."
                   control={
                     <Switch
                       label=""
@@ -674,8 +759,79 @@ export function SettingsPage(): ReactNode {
                   }
                 />
                 <Row
+                  label="Include project context"
+                  hint="Sends a bounded list of workspace file names. Off by default."
+                  control={
+                    <Switch
+                      label=""
+                      checked={settings.prompts.projectContext}
+                      onChange={(value) => prompts({ projectContext: value })}
+                    />
+                  }
+                />
+                <Row
+                  label="Request timeout"
+                  hint={`${settings.prompts.timeoutSeconds}s before a provider is abandoned.`}
+                  control={
+                    <input
+                      type="number"
+                      className="input"
+                      min={10}
+                      max={300}
+                      step={5}
+                      value={settings.prompts.timeoutSeconds}
+                      onChange={(event) => {
+                        const next = Number(event.target.value)
+                        if (Number.isFinite(next)) prompts({ timeoutSeconds: Math.round(next) })
+                      }}
+                    />
+                  }
+                />
+                <Row
+                  label="First provider"
+                  hint="Every allowed provider is listed separately; the first that answers is used."
+                  control={
+                    <select
+                      className="select"
+                      value={settings.prompts.priority[0] ?? 'ollama'}
+                      onChange={(event) => {
+                        const first = event.target.value as Settings['prompts']['priority'][number]
+                        const rest = settings.prompts.priority.filter((id) => id !== first)
+                        prompts({ priority: [first, ...rest] })
+                      }}
+                    >
+                      {PROMPT_PROVIDER_IDS.map((id) => (
+                        <option key={id} value={id}>
+                          {SECTION_PROVIDER_LABELS[id]}
+                        </option>
+                      ))}
+                    </select>
+                  }
+                />
+                <Row
+                  label="Second provider"
+                  hint="Used only when the first provider fails."
+                  control={
+                    <select
+                      className="select"
+                      value={settings.prompts.priority[1] ?? 'google'}
+                      onChange={(event) => {
+                        const second = event.target.value as Settings['prompts']['priority'][number]
+                        const first = settings.prompts.priority[0] ?? 'ollama'
+                        prompts({ priority: [first, second].filter((id, index, all) => all.indexOf(id) === index) })
+                      }}
+                    >
+                      {PROMPT_PROVIDER_IDS.map((id) => (
+                        <option key={id} value={id}>
+                          {SECTION_PROVIDER_LABELS[id]}
+                        </option>
+                      ))}
+                    </select>
+                  }
+                />
+                <Row
                   label="Ollama"
-                  hint="Local model server."
+                  hint="Local model server (nothing ever leaves the machine)."
                   control={
                     <Switch
                       label=""
@@ -694,21 +850,19 @@ export function SettingsPage(): ReactNode {
                   }
                 />
                 <Row
-                  label="OpenRouter"
-                  hint="Requires a stored credential."
+                  label="Ollama model"
+                  hint="Leave blank to use the first installed Gemma model."
                   control={
-                    <Switch
-                      label=""
-                      checked={settings.prompts.openrouter.enabled}
-                      disabled={!state.secrets.openrouter}
-                      onChange={(value) =>
-                        prompts({ openrouter: { ...settings.prompts.openrouter, enabled: value } })
-                      }
+                    <DraftInput
+                      value={settings.prompts.ollama.model}
+                      placeholder="auto-detect"
+                      onCommit={(value) => prompts({ ollama: { ...settings.prompts.ollama, model: value.trim() } })}
                     />
                   }
                 />
                 <Row
-                  label="Google"
+                  label="Google AI Studio"
+                  hint="Hosted Gemma. Uses your API key against the official endpoint — no URL to configure."
                   control={
                     <Switch
                       label=""
@@ -718,6 +872,58 @@ export function SettingsPage(): ReactNode {
                     />
                   }
                 />
+                <Row
+                  label="Google model"
+                  hint="Hosted Gemma models available through the Gemini API."
+                  control={
+                    <select
+                      className="select"
+                      value={
+                        GOOGLE_GEMMA_MODELS.includes(settings.prompts.google.model)
+                          ? settings.prompts.google.model
+                          : '__custom'
+                      }
+                      onChange={(event) => {
+                        if (event.target.value === '__custom') return
+                        prompts({ google: { ...settings.prompts.google, model: event.target.value } })
+                      }}
+                    >
+                      {GOOGLE_GEMMA_MODELS.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                      {GOOGLE_GEMMA_MODELS.includes(settings.prompts.google.model) ? null : (
+                        <option value="__custom">{settings.prompts.google.model || 'custom…'}</option>
+                      )}
+                    </select>
+                  }
+                />
+              </div>
+              <div className="settings__section-head">
+                <h2 className="settings__section-title">Provider status</h2>
+                <p className="settings__section-desc">
+                  Checked against the real endpoints and stored credentials.
+                </p>
+              </div>
+              <div className="settings__group">
+                {providerStatus.map((provider) => (
+                  <Row
+                    key={provider.id}
+                    label={SECTION_PROVIDER_LABELS[provider.id]}
+                    hint={
+                      <span title={provider.message}>
+                        {provider.message}
+                        {provider.ms !== null ? ` · ${provider.ms}ms` : ''}
+                      </span>
+                    }
+                    control={
+                      <span className={`stat-pill ${provider.reachable ? 'stat-pill--ok' : provider.configured ? 'stat-pill--warn' : 'stat-pill--off'}`}>
+                        {provider.reachable ? 'reachable' : provider.configured ? 'unreachable' : 'not configured'}
+                      </span>
+                    }
+                  />
+                ))}
               </div>
             </>
           ) : null}
@@ -725,16 +931,15 @@ export function SettingsPage(): ReactNode {
           {section === 'announcements' ? (
             <>
               <div className="settings__section-head">
-                <h2 className="settings__section-title">
-                  Announcements
-                  {SECTION_COMING_SOON.has('announcements') ? (
-                    <span className="settings__soon">coming soon</span>
-                  ) : null}
-                </h2>
-                <p className="settings__section-desc">Spoken notifications for terminal events.</p>
+                <h2 className="settings__section-title">Announcements</h2>
+                <p className="settings__section-desc">
+                  Spoken notifications for events VoxTerm can genuinely confirm.
+                </p>
               </div>
-              <Notice tone="warning" icon={<ShieldCheck size={15} />}>
-                Speech synthesis is part of a later milestone and is inactive in this build.
+              <Notice tone={state.secrets.elevenlabs ? 'info' : 'warning'} icon={<ShieldCheck size={15} />}>
+                {state.secrets.elevenlabs
+                  ? 'A credential is stored. Announcements are synthesised by ElevenLabs and played locally; the announcement text is sent to that service.'
+                  : 'No ElevenLabs credential is stored, so nothing can be spoken yet. Add one under System & credentials.'}
               </Notice>
               <div className="settings__group">
                 <Row
@@ -744,6 +949,38 @@ export function SettingsPage(): ReactNode {
                       label=""
                       checked={settings.announcements.enabled}
                       onChange={(value) => announcements({ enabled: value })}
+                    />
+                  }
+                />
+                <Row
+                  label="Mute"
+                  hint="Keeps announcements enabled but plays nothing until you unmute."
+                  control={
+                    <Switch
+                      label=""
+                      checked={settings.announcements.muted}
+                      onChange={(value) => announcements({ muted: value })}
+                    />
+                  }
+                />
+                <Row
+                  label="Voice ID"
+                  hint="Required — the voice to speak with."
+                  control={
+                    <DraftInput
+                      value={settings.announcements.voiceId}
+                      placeholder="ElevenLabs voice id"
+                      onCommit={(value) => announcements({ voiceId: value.trim() })}
+                    />
+                  }
+                />
+                <Row
+                  label="Model"
+                  control={
+                    <DraftInput
+                      value={settings.announcements.modelId}
+                      placeholder="eleven_multilingual_v2"
+                      onCommit={(value) => announcements({ modelId: value.trim() || 'eleven_multilingual_v2' })}
                     />
                   }
                 />
@@ -780,7 +1017,7 @@ export function SettingsPage(): ReactNode {
                   stacked
                   control={
                     <div className="chip-row">
-                      {(['session-exit', 'build-finished', 'error', 'agent-event'] as const).map((kind) => {
+                      {ANNOUNCEMENT_CATEGORIES.map((kind) => {
                         const selected = settings.announcements.eventCategories.includes(kind)
                         return (
                           <button
@@ -793,11 +1030,73 @@ export function SettingsPage(): ReactNode {
                               announcements({ eventCategories: next })
                             }}
                           >
-                            {kind}
+                            {ANNOUNCEMENT_LABELS[kind]}
                           </button>
                         )
                       })}
                     </div>
+                  }
+                />
+                <Row
+                  label="Test announcement"
+                  hint="Makes one real synthesis request and plays the audio here."
+                  control={
+                    <button
+                      className="btn"
+                      disabled={!settings.announcements.voiceId || !state.secrets.elevenlabs}
+                      onClick={() => void announceTest()}
+                    >
+                      <Volume2 size={14} />
+                      Test
+                    </button>
+                  }
+                />
+              </div>
+            </>
+          ) : null}
+
+          {section === 'external' ? (
+            <>
+              <div className="settings__section-head">
+                <h2 className="settings__section-title">External sessions</h2>
+                <p className="settings__section-desc">
+                  Discover tmux and screen sessions already running on this machine and attach to them.
+                </p>
+              </div>
+              <Notice tone="info" icon={<Link2 size={15} />}>
+                VoxTerm never steals or kills a session it did not start. Closing an attached session only detaches,
+                and a session already in use elsewhere is joined in shared mode.
+              </Notice>
+              <div className="settings__group">
+                <Row
+                  label="Discover tmux sessions"
+                  control={
+                    <Switch
+                      label=""
+                      checked={settings.external.discoverTmux}
+                      onChange={(value) => external({ discoverTmux: value })}
+                    />
+                  }
+                />
+                <Row
+                  label="Discover screen sessions"
+                  control={
+                    <Switch
+                      label=""
+                      checked={settings.external.discoverScreen}
+                      onChange={(value) => external({ discoverScreen: value })}
+                    />
+                  }
+                />
+                <Row
+                  label="Confirm before attaching"
+                  hint="Shows which session is about to be attached in the Terminals view."
+                  control={
+                    <Switch
+                      label=""
+                      checked={settings.external.confirmAttach}
+                      onChange={(value) => external({ confirmAttach: value })}
+                    />
                   }
                 />
               </div>
@@ -935,15 +1234,10 @@ export function SettingsPage(): ReactNode {
                   <span className="section-title">Credentials</span>
                 </div>
                 <p className="field__hint">
-                  Credentials are encrypted on disk and never returned to the interface or written to logs.
+                  Credentials are encrypted on disk and never returned to the interface or written to logs. Keys
+                  can also be supplied through a local <code>.env</code> file (see .env.example); a key stored
+                  here always takes precedence over the environment.
                 </p>
-                <SecretRow
-                  slot="openrouter"
-                  label="OpenRouter API key"
-                  present={state.secrets.openrouter}
-                  onSave={actions.setSecret}
-                  onClear={actions.clearSecret}
-                />
                 <SecretRow
                   slot="google"
                   label="Google API key"

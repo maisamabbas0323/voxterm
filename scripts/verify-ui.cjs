@@ -1,11 +1,11 @@
 /**
  * Runtime UI verification for VoxTerm (headless-friendly).
  *
- * Launches the built app (real main process + real IPC), attaches over the
- * Chrome DevTools Protocol and asserts the things that can only be checked at
- * runtime: the sidebar-collapse icon fix, the logo, absence of external-session
- * UI, the terminal-font dropdown, and horizontal-overflow freedom at both wide
- * and narrow viewport widths.
+ * Boots the built app, attaches over the Chrome DevTools Protocol and asserts
+ * the things that can only be checked at runtime: the sidebar-collapse icon fix,
+ * the logo, the absence of a standalone Voice page, the live external-session
+ * attach controls, the terminal-font dropdown, and horizontal-overflow freedom
+ * at both wide and narrow viewport widths.
  *
  * Usage (Linux, no Node deps beyond Node 22's global fetch/WebSocket):
  *
@@ -46,6 +46,7 @@ async function waitForPage(timeoutMs = 30000) {
   throw new Error('DevTools target never appeared')
 }
 
+let harnessStderr = ''
 async function main() {
   const child = spawn(
     `${ROOT}/node_modules/electron/dist/electron`,
@@ -57,6 +58,10 @@ async function main() {
     }
   )
   let stderr = ''
+  child.on('exit', (code, signal) => {
+    stderr += `\n[electron exited: code=${code} signal=${signal}]\n`
+  })
+  harnessStderr = () => stderr
   child.stderr.on('data', (d) => (stderr += d.toString()))
   child.stdout.on('data', (d) => (stderr += d.toString()))
 
@@ -151,7 +156,7 @@ async function main() {
     )
     check(
       'every nav icon stays visible inside the collapsed rail',
-      sidebar.icons.length === 5 && sidebar.icons.every((i) => i.visible && i.insideRail),
+      sidebar.icons.length === 4 && sidebar.icons.every((i) => i.visible && i.insideRail),
       JSON.stringify(sidebar.icons)
     )
     check(
@@ -171,23 +176,47 @@ async function main() {
     )
     check('branded logo mark is rendered in the title bar', logoCount >= 1, `count=${logoCount}`)
 
-    // --- No external-session UI remains ---------------------------------------
-    const pages = ['workspace', 'terminals', 'voice', 'activity', 'settings']
+    // --- Navigation surface ---------------------------------------------------
+    // The standalone Voice page was removed; voice now lives in Settings.
+    const pages = ['workspace', 'terminals', 'activity', 'settings']
+    const voiceNavRemoved = await evaluate(nav('voice'))
+    check('the standalone Voice nav item is gone', voiceNavRemoved === false)
     for (const key of pages) {
       const found = await evaluate(nav(key))
       check(`nav "${key}" is clickable`, found)
       await sleep(250)
     }
 
-    const externalHits = await evaluate(`(() => {
-      const text = document.body.innerText;
-      const hits = [];
-      for (const needle of ['external session', 'external sessions', 'attach to session', 'detach', 'discovered session']) {
-        if (text.toLowerCase().includes(needle.toLowerCase())) hits.push(needle);
-      }
-      return hits;
+    // --- External-session attach UI is present and honest ---------------------
+    // The Terminals view exposes a real attach control, a find control scoped to
+    // the terminal, and (when tmux/screen sessions exist) a live attach strip.
+    await evaluate(nav('terminals'))
+    await sleep(300)
+    const terminalControls = await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll('button')];
+      return {
+        attach: buttons.some(b => /attach/i.test(b.getAttribute('title') || '') || /attach/i.test(b.getAttribute('aria-label') || '')),
+        find: buttons.some(b => /find in terminal/i.test(b.getAttribute('aria-label') || '')),
+        strip: Boolean(document.querySelector('.external-strip'))
+      };
     })()`)
-    check('no external-session wording anywhere in the UI', externalHits.length === 0, JSON.stringify(externalHits))
+    check('terminals exposes an attach control', terminalControls.attach === true, JSON.stringify(terminalControls))
+    check('terminals exposes a find control', terminalControls.find === true, JSON.stringify(terminalControls))
+
+    // The Settings page always carries the "External sessions" section, so assert
+    // the wording there (the live strip only appears when tmux/screen sessions exist).
+    await evaluate(nav('settings'))
+    await sleep(250)
+    const externalHits = await evaluate(`(() => {
+      const text = document.body.innerText.toLowerCase();
+      const extra = [...document.querySelectorAll('button,a,h1,h2,h3,p,td,th')].map(e => e.textContent.trim()).filter(t => /external/i.test(t)).slice(0, 5)
+      return { mention: text.includes('external session') || text.includes('attach'), labels: extra };
+    })()`)
+    check(
+      'external-session wording exists and is backed by real controls',
+      (externalHits.mention ?? false) && (externalHits.labels?.length ?? 0) > 0,
+      JSON.stringify(externalHits)
+    )
 
     // --- Terminal font dropdown ----------------------------------------------
     await evaluate(nav('settings'))
@@ -223,8 +252,8 @@ async function main() {
       `[...document.querySelectorAll('.settings__link')].map(b => b.textContent)`
     )
     check(
-      'settings has no "External sessions" section',
-      !sections.some((s) => /external/i.test(s)),
+      'settings exposes an "External sessions" section',
+      sections.some((s) => /external/i.test(s)),
       JSON.stringify(sections)
     )
 
@@ -336,5 +365,9 @@ async function main() {
 
 main().catch((error) => {
   process.stdout.write(`SMOKE HARNESS ERROR: ${error && error.stack ? error.stack : error}\n`)
+  if (harnessStderr) {
+    const log = typeof harnessStderr === 'function' ? harnessStderr() : harnessStderr
+    if (log && log.trim()) process.stdout.write(`[electron output]\n${log.slice(-4000)}\n`)
+  }
   process.exit(2)
 })

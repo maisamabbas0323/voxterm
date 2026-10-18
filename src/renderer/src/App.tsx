@@ -11,7 +11,6 @@ import { terminalRegistry } from './features/terminals/registry'
 import { TerminalsPage } from './pages/TerminalsPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { ActivityPage } from './pages/ActivityPage'
-import { VoicePage } from './pages/VoicePage'
 import { SettingsPage } from './pages/SettingsPage'
 
 function LoadingScreen(): ReactNode {
@@ -46,13 +45,26 @@ export function App(): ReactNode {
 
   const contextLabel = useMemo(() => NAV_ITEMS.find((item) => item.key === nav)?.label, [nav])
 
-  // Global keyboard shortcuts. Terminal-local bindings (copy, find) remain in
-  // the terminal surface; these operate on the application as a whole.
+  // Global keyboard shortcuts. Terminal-local bindings (copy, find) live in the
+  // terminal surface; these operate on the application as a whole. The listener
+  // runs in the capture phase and consumes handled keys, so a shortcut never
+  // also types a control character into the focused shell.
+  //
+  // Find (Ctrl+F / Ctrl+Shift+F) is deliberately scoped to the Terminals view.
+  // It is not consumed anywhere else, so it can never open terminal search from
+  // another page or the surrounding interface.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const mod = event.ctrlKey || event.metaKey
       if (!mod) return
+      // Key auto-repeat must never re-fire a toggle.
+      if (event.repeat) return
       const key = event.key.toLowerCase()
+
+      const consume = (): void => {
+        event.preventDefault()
+        event.stopPropagation()
+      }
 
       // Ctrl +/−/0 resize the terminal font. Zoom is deliberately scoped to the
       // terminal: the main process disables page zoom, so the surrounding
@@ -60,32 +72,34 @@ export function App(): ReactNode {
       const zoomIn = key === '=' || key === '+'
       const zoomOut = key === '-' || key === '_'
       const zoomReset = key === '0' && !event.shiftKey
-      if ((zoomIn || zoomOut || zoomReset) && sessions.length > 0) {
-        event.preventDefault()
+      if ((zoomIn || zoomOut || zoomReset) && nav === 'terminals' && sessions.length > 0) {
+        consume()
         if (zoomReset) terminalRegistry.resetZoom()
         else terminalRegistry.zoomBy(zoomIn ? 1 : -1)
         return
       }
 
+      // Find only ever works inside the Terminals view — never on another page
+      // and never outside the app.
+      if (key === 'f' && nav === 'terminals') {
+        consume()
+        setTimeout(() => window.dispatchEvent(new CustomEvent('voxterm:find')), 0)
+        return
+      }
+
       if (event.shiftKey && key === 't') {
-        event.preventDefault()
+        consume()
         void actions.createTerminal()
         return
       }
       if (event.shiftKey && key === 'w') {
-        event.preventDefault()
+        consume()
         actions.navigate('terminals')
         setTimeout(() => window.dispatchEvent(new CustomEvent('voxterm:close-active')), 0)
         return
       }
-      if (event.shiftKey && key === 'f') {
-        event.preventDefault()
-        actions.navigate('terminals')
-        setTimeout(() => window.dispatchEvent(new CustomEvent('voxterm:find')), 0)
-        return
-      }
       if (event.key === 'Tab') {
-        event.preventDefault()
+        consume()
         if (sessions.length < 2) return
         const currentIndex = sessions.findIndex((session) => session.id === activeSessionId)
         const delta = event.shiftKey ? -1 : 1
@@ -98,16 +112,16 @@ export function App(): ReactNode {
         const index = Number(event.key)
         const target = index === 9 ? sessions[sessions.length - 1] : sessions[index - 1]
         if (target) {
-          event.preventDefault()
+          consume()
           actions.setActiveSession(target.id)
           actions.navigate('terminals')
         }
       }
     }
 
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [actions, sessions, activeSessionId])
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [actions, sessions, activeSessionId, nav])
 
   if (state.status === 'loading') return <LoadingScreen />
   if (state.status === 'error') return <ErrorScreen message={state.error ?? 'Unknown error'} />
@@ -120,7 +134,6 @@ export function App(): ReactNode {
         <main className="app-main">
           {nav === 'workspace' ? <WorkspacePage /> : null}
           {nav === 'terminals' ? <TerminalsPage /> : null}
-          {nav === 'voice' ? <VoicePage /> : null}
           {nav === 'activity' ? <ActivityPage /> : null}
           {nav === 'settings' ? <SettingsPage /> : null}
         </main>

@@ -1,15 +1,29 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, IPC_EVENTS } from '@shared/ipc'
-import type { VoxTermAPI } from '@shared/api'
+import type {
+  AnnouncementAudioPayload,
+  HotkeyPayload,
+  MicrophoneAccessResult,
+  StopRecordingPayload,
+  VoxTermAPI
+} from '@shared/api'
 import type { SecretsStatus, Settings } from '@shared/schemas'
 import type {
   ActivityEvent,
   AgentProfileStatus,
+  AnnouncementStatus,
   CloseSessionResult,
   CreateTerminalOptions,
+  DiagnosticsReport,
+  ExternalDiscoveryResult,
   OperationResult,
+  PromptEnhanceResult,
+  PromptProviderId,
+  PromptProviderStatus,
   SystemInfo,
-  TerminalSessionInfo
+  TerminalSessionInfo,
+  TranscribeResult,
+  VoiceStatus
 } from '@shared/types'
 
 function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
@@ -37,6 +51,7 @@ const api: VoxTermAPI = {
   },
   system: {
     info: () => invoke<SystemInfo>(IPC.systemInfo),
+    diagnostics: () => invoke<DiagnosticsReport>(IPC.systemDiagnostics),
     openExternal: (url) => invoke<OperationResult>(IPC.systemOpenExternal, url),
     showItemInFolder: (path) => invoke<OperationResult>(IPC.systemShowItemInFolder, path)
   },
@@ -71,6 +86,36 @@ const api: VoxTermAPI = {
     list: () => invoke<AgentProfileStatus[]>(IPC.agentsList),
     save: (profile) => invoke<AgentProfileStatus[]>(IPC.agentsSave, profile),
     delete: (id) => invoke<AgentProfileStatus[]>(IPC.agentsDelete, { id })
+  },
+  voice: {
+    status: () => invoke<VoiceStatus>(IPC.voiceStatus),
+    requestMicrophoneAccess: (payload) =>
+      invoke<MicrophoneAccessResult>(IPC.voiceRequestMicrophonePermission, payload ?? {}),
+    startRecording: (payload) => invoke<OperationResult>(IPC.voiceStartRecording, payload ?? {}),
+    stopRecording: (payload: StopRecordingPayload) =>
+      invoke<TranscribeResult>(IPC.voiceStopRecording, {
+        // Structured clone keeps ArrayBuffer across the bridge; the main-side
+        // schema converts it to a Buffer before writing the temp file.
+        wav: new Uint8Array(payload.wav),
+        sampleRate: payload.sampleRate,
+        durationMs: payload.durationMs
+      }),
+    cancelRecording: () => invoke<void>(IPC.voiceCancelRecording),
+    onStatusChanged: (listener) => on<VoiceStatus>(IPC_EVENTS.voiceStatusChanged, listener),
+    onHotkey: (listener) => on<HotkeyPayload>(IPC_EVENTS.voiceHotkeyPressed, listener)
+  },
+  prompts: {
+    status: () => invoke<PromptProviderStatus[]>(IPC.promptsStatus),
+    test: (id: PromptProviderId) => invoke<PromptProviderStatus>(IPC.promptsTest, { id }),
+    enhance: (payload) => invoke<PromptEnhanceResult>(IPC.promptsEnhance, payload)
+  },
+  announcements: {
+    status: () => invoke<AnnouncementStatus>(IPC.announcementsStatus),
+    test: () => invoke<OperationResult>(IPC.announcementsTest),
+    onAudio: (listener) => on<AnnouncementAudioPayload>(IPC_EVENTS.announcementsAudio, listener)
+  },
+  external: {
+    discover: () => invoke<ExternalDiscoveryResult>(IPC.externalDiscover)
   },
   activity: {
     list: () => invoke<ActivityEvent[]>(IPC.activityList),

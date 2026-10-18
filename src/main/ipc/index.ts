@@ -1,10 +1,15 @@
 import { IPC_EVENTS } from '@shared/ipc'
+import type { ActivityEvent } from '@shared/types'
 import { broadcast, type Services } from '../services'
 import { registerSettingsIpc } from './settings'
 import { registerSystemIpc } from './system'
 import { registerWindowIpc } from './window'
 import { registerTerminalIpc } from './terminal'
 import { registerAgentIpc } from './agents'
+import { registerVoiceIpc } from './voice'
+import { registerExternalIpc } from './external'
+import { registerAnnouncementIpc } from './announcements'
+import { registerPromptIpc } from './prompts'
 import { registerActivityIpc, registerAppIpc } from './activity'
 
 /** Register every request handler. Called once during app startup. */
@@ -14,8 +19,34 @@ export function registerIpcHandlers(services: Services): void {
   registerWindowIpc(services)
   registerTerminalIpc(services)
   registerAgentIpc(services)
+  registerVoiceIpc(services)
+  registerExternalIpc({ external: services.external, activity: services.activity })
+  registerAnnouncementIpc({ announcements: services.announcements })
+  registerPromptIpc({ prompts: services.prompts, activity: services.activity })
   registerActivityIpc(services)
   registerAppIpc(services)
+}
+
+/**
+ * Decide which genuinely-observed activity is worth speaking aloud.
+ *
+ * Every map here is a real event that VoxTerm itself caused — an exited shell,
+ * a failed operation, an agent profile change. Nothing is inferred, and the
+ * announcement service's own activity records are skipped so a failed
+ * synthesis can never feed back into another announcement.
+ */
+async function announceActivity(services: Services, event: ActivityEvent): Promise<void> {
+  if (event.type.startsWith('announcement.')) return
+
+  const category = event.type.startsWith('agent.')
+    ? 'agent-event'
+    : event.level === 'error'
+      ? 'error'
+      : null
+  if (!category) return
+
+  // The service applies the settings gates (enabled, muted, category, dedupe).
+  await services.announcements.announce(category, event.message)
 }
 
 /**
@@ -39,8 +70,18 @@ export function wireMainEvents(services: Services): () => void {
         level: payload.exitCode === 0 ? 'info' : 'warn',
         details: { sessionId: payload.sessionId, exitCode: payload.exitCode, signal: payload.signal }
       })
+      // An attached multiplexer session outlives our client — closing the tab
+      // only detaches us, so announcing a "session exit" would be a lie.
+      if (info && !info.origin.detachOnly) {
+        void services.announcements
+          .announce('session-exit', `Terminal ${info.title} exited.`)
+          .catch(() => undefined)
+      }
     }),
-    services.activity.onEvent((event) => broadcast(IPC_EVENTS.activityEvent, event))
+    services.activity.onEvent((event) => {
+      broadcast(IPC_EVENTS.activityEvent, event)
+      void announceActivity(services, event).catch(() => undefined)
+    })
   )
 
   return () => {

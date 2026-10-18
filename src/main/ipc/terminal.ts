@@ -15,9 +15,12 @@ import {
 const sessionIdSchema = z.string().uuid()
 
 /**
- * Close a terminal session. Closing a tab and terminating its process are the
- * same operation for a VoxTerm-managed shell: the process group is terminated
- * so nothing is left orphaned, then the tab disappears.
+ * Close a terminal session.
+ *
+ * Managed shells are owned outright: closing a tab terminates the process group
+ * so nothing is left orphaned. Attached multiplexer sessions (tmux/screen) are
+ * shared with the user's own client, so closing the tab only detaches our
+ * client — the multiplexer server and its work keep running.
  */
 async function closeSession(services: Services, sessionId: string): Promise<CloseSessionResult> {
   const info = services.sessions.get(sessionId)
@@ -26,6 +29,22 @@ async function closeSession(services: Services, sessionId: string): Promise<Clos
   }
 
   await services.sessions.terminate(sessionId)
+
+  if (info.origin.detachOnly) {
+    services.activity.record({
+      category: 'terminal',
+      type: 'external.detached',
+      message: `Detached from ${info.origin.kind} session "${info.origin.target ?? info.title}"`,
+      level: 'info',
+      details: { sessionId, kind: info.origin.kind, target: info.origin.target ?? null }
+    })
+    return {
+      id: sessionId,
+      terminated: false,
+      message: `Detached. The ${info.origin.kind} session "${info.origin.target ?? info.title}" keeps running.`
+    }
+  }
+
   services.activity.record({
     category: 'terminal',
     type: 'terminal.closed',

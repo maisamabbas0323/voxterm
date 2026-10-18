@@ -2,11 +2,20 @@ import type {
   ActivityEvent,
   AgentProfile,
   AgentProfileStatus,
+  AnnouncementStatus,
   CloseSessionResult,
   CreateTerminalOptions,
+  DiagnosticsReport,
+  ExternalDiscoveryResult,
+  MicrophonePermission,
   OperationResult,
+  PromptEnhanceResult,
+  PromptProviderId,
+  PromptProviderStatus,
   SystemInfo,
-  TerminalSessionInfo
+  TerminalSessionInfo,
+  TranscribeResult,
+  VoiceStatus
 } from './types'
 import type { SecretsStatus, Settings } from './schemas'
 
@@ -41,6 +50,34 @@ export interface AgentSavePayload {
   env?: Record<string, string>
 }
 
+/** Renderer -> main: ask whether capture is permitted for the current settings. */
+export interface MicrophoneAccessResult {
+  allowed: boolean
+  permission: MicrophonePermission
+  message?: string
+}
+
+/** Renderer -> main: the finished 16-bit PCM WAV plus capture metadata. */
+export interface StopRecordingPayload {
+  /** Raw WAV bytes (ArrayBuffer survives structured clone; Buffer does not). */
+  wav: ArrayBuffer
+  sampleRate: number
+  durationMs: number
+}
+
+/** Main -> renderer: encoded speech ready for local playback. */
+export interface AnnouncementAudioPayload {
+  id: string
+  category: string
+  mimeType: string
+  dataBase64: string
+}
+
+/** Main -> renderer: the global push-to-talk hotkey changed state. */
+export interface HotkeyPayload {
+  pressed: boolean
+}
+
 /**
  * The narrow, typed surface exposed to the renderer through `contextBridge`.
  * No Node.js primitives, no unrestricted ipcRenderer, no child_process.
@@ -57,6 +94,7 @@ export interface VoxTermAPI {
   }
   system: {
     info(): Promise<SystemInfo>
+    diagnostics(): Promise<DiagnosticsReport>
     openExternal(url: string): Promise<OperationResult>
     showItemInFolder(path: string): Promise<OperationResult>
   }
@@ -90,6 +128,33 @@ export interface VoxTermAPI {
     list(): Promise<AgentProfileStatus[]>
     save(profile: AgentSavePayload): Promise<AgentProfileStatus[]>
     delete(id: string): Promise<AgentProfileStatus[]>
+  }
+  voice: {
+    status(): Promise<VoiceStatus>
+    /**
+     * Ask the main process whether microphone capture is permitted right now,
+     * optionally recording the outcome `getUserMedia` actually reported.
+     */
+    requestMicrophoneAccess(payload?: { outcome?: 'granted' | 'denied' }): Promise<MicrophoneAccessResult>
+    startRecording(payload?: { source?: 'manual' | 'hotkey' }): Promise<OperationResult>
+    stopRecording(payload: StopRecordingPayload): Promise<TranscribeResult>
+    cancelRecording(): Promise<void>
+    onStatusChanged(listener: (status: VoiceStatus) => void): () => void
+    onHotkey(listener: (payload: HotkeyPayload) => void): () => void
+  }
+  prompts: {
+    status(): Promise<PromptProviderStatus[]>
+    test(id: PromptProviderId): Promise<PromptProviderStatus>
+    enhance(payload: { text: string; cwd?: string }): Promise<PromptEnhanceResult>
+  }
+  announcements: {
+    status(): Promise<AnnouncementStatus>
+    /** Make a real synthesis request and play the result locally. */
+    test(): Promise<OperationResult>
+    onAudio(listener: (payload: AnnouncementAudioPayload) => void): () => void
+  }
+  external: {
+    discover(): Promise<ExternalDiscoveryResult>
   }
   activity: {
     list(): Promise<ActivityEvent[]>

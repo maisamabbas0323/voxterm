@@ -47,11 +47,24 @@ export const voiceSettingsSchema = z.object({
     .regex(/^[A-Za-z0-9+ -]*$/, 'Hotkey may only contain letters, digits, "+", "-" and spaces')
     .default('Ctrl+Alt+Space'),
   pushToTalk: z.boolean().default(true),
-  transcriptionProvider: z.enum(['none', 'whisper-local']).default('none'),
-  whisperModelPath: directory.default(''),
+  /** ElevenLabs speech-to-text model, e.g. "scribe_v1". */
+  sttModelId: z.string().max(80).default('scribe_v1'),
+  /** ISO-639 language hint, or "auto" to let the service detect it. */
   language: z.string().max(32).default('auto'),
-  /** Whether the next prompt may be reviewed before being sent to an agent. */
-  reviewBeforeSend: z.boolean().default(true)
+  /** Minimum capture length accepted for transcription, in milliseconds. */
+  minRecordingMs: z.number().int().min(300).max(10000).default(700),
+  /**
+   * After a hotkey transcription, immediately send the transcript to the
+   * configured Gemma provider and use the rewritten prompt.
+   */
+  autoEnhance: z.boolean().default(true),
+  /** Insert the finished text into the active terminal without an extra click. */
+  autoInsert: z.boolean().default(true),
+  /**
+   * Only react to the push-to-talk hotkey while the Terminals view is open, so
+   * a stray key press anywhere else can never open the microphone.
+   */
+  terminalOnly: z.boolean().default(true)
 })
 
 export const promptProviderSchema = z.object({
@@ -62,25 +75,46 @@ export const promptProviderSchema = z.object({
 
 export const promptSettingsSchema = z.object({
   priority: z
-    .array(z.enum(['ollama', 'openrouter', 'google']))
-    .max(3)
-    .default(['ollama', 'openrouter', 'google']),
+    .array(z.enum(['ollama', 'google']))
+    .max(2)
+    .default(['ollama', 'google']),
   localOnly: z.boolean().default(true),
   reviewBeforeSend: z.boolean().default(true),
+  /** Send a bounded list of workspace file names as context. */
+  projectContext: z.boolean().default(false),
+  /** Per-request timeout for a provider call, in seconds. */
+  timeoutSeconds: z.number().int().min(10).max(300).default(60),
   ollama: promptProviderSchema.default({ enabled: true, baseUrl: 'http://127.0.0.1:11434', model: '' }),
-  openrouter: promptProviderSchema.default({ enabled: false, baseUrl: 'https://openrouter.ai/api/v1', model: '' }),
-  google: promptProviderSchema.default({ enabled: false, baseUrl: '', model: '' })
+  google: promptProviderSchema.default({
+    enabled: false,
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    model: 'gemma-4-31b-it'
+  })
 })
+
+/** Events VoxTerm can genuinely confirm are worth announcing. */
+export const ANNOUNCEMENT_CATEGORIES = ['session-exit', 'error', 'agent-event'] as const
+export type AnnouncementCategory = (typeof ANNOUNCEMENT_CATEGORIES)[number]
 
 export const announcementSettingsSchema = z.object({
   enabled: z.boolean().default(false),
+  muted: z.boolean().default(false),
   voiceId: z.string().max(200).default(''),
+  modelId: z.string().max(80).default('eleven_multilingual_v2'),
   volume: z.number().min(0).max(1).default(0.8),
   rate: z.number().min(0.5).max(2).default(1),
+  /** Only events VoxTerm can genuinely confirm are offered. */
   eventCategories: z
-    .array(z.enum(['session-exit', 'build-finished', 'error', 'agent-event']))
+    .array(z.enum(ANNOUNCEMENT_CATEGORIES))
     .max(16)
     .default(['error'])
+})
+
+export const externalSettingsSchema = z.object({
+  discoverTmux: z.boolean().default(true),
+  discoverScreen: z.boolean().default(true),
+  /** Ask before attaching to a multiplexer session. */
+  confirmAttach: z.boolean().default(true)
 })
 
 export const privacySettingsSchema = z.object({
@@ -93,12 +127,13 @@ export const privacySettingsSchema = z.object({
 })
 
 export const settingsSchema = z.object({
-  version: z.number().int().min(1).default(1),
+  version: z.number().int().min(1).default(2),
   appearance: appearanceSettingsSchema.default(() => appearanceSettingsSchema.parse({})),
   terminal: terminalSettingsSchema.default(() => terminalSettingsSchema.parse({})),
   voice: voiceSettingsSchema.default(() => voiceSettingsSchema.parse({})),
   prompts: promptSettingsSchema.default(() => promptSettingsSchema.parse({})),
   announcements: announcementSettingsSchema.default(() => announcementSettingsSchema.parse({})),
+  external: externalSettingsSchema.default(() => externalSettingsSchema.parse({})),
   privacy: privacySettingsSchema.default(() => privacySettingsSchema.parse({}))
 })
 
@@ -108,6 +143,7 @@ export type TerminalSettings = z.infer<typeof terminalSettingsSchema>
 export type VoiceSettings = z.infer<typeof voiceSettingsSchema>
 export type PromptSettings = z.infer<typeof promptSettingsSchema>
 export type AnnouncementSettings = z.infer<typeof announcementSettingsSchema>
+export type ExternalSettings = z.infer<typeof externalSettingsSchema>
 export type PrivacySettings = z.infer<typeof privacySettingsSchema>
 
 /** Settings section identifiers used by the Settings page navigation. */
@@ -117,6 +153,7 @@ export const SETTINGS_SECTIONS = [
   'voice',
   'prompts',
   'announcements',
+  'external',
   'privacy',
   'system'
 ] as const
@@ -125,7 +162,7 @@ export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]
 export const DEFAULT_SETTINGS: Settings = settingsSchema.parse({})
 
 /** Names of credential slots. Values are never returned to the renderer. */
-export const SECRET_SLOTS = ['openrouter', 'google', 'elevenlabs'] as const
+export const SECRET_SLOTS = ['google', 'elevenlabs'] as const
 export type SecretSlot = (typeof SECRET_SLOTS)[number]
 
 export type SecretsStatus = Record<SecretSlot, boolean>
@@ -191,6 +228,7 @@ export function parseSettings(input: unknown): { settings: Settings; issues: str
     voice: recoverSection(voiceSettingsSchema, DEFAULT_SETTINGS.voice, raw.voice),
     prompts: recoverSection(promptSettingsSchema, DEFAULT_SETTINGS.prompts, raw.prompts),
     announcements: recoverSection(announcementSettingsSchema, DEFAULT_SETTINGS.announcements, raw.announcements),
+    external: recoverSection(externalSettingsSchema, DEFAULT_SETTINGS.external, raw.external),
     privacy: recoverSection(privacySettingsSchema, DEFAULT_SETTINGS.privacy, raw.privacy)
   }
   return { settings, issues }

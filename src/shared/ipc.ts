@@ -43,6 +43,28 @@ export const IPC = {
   agentsSave: 'agents:save',
   agentsDelete: 'agents:delete',
 
+  // Voice
+  voiceStatus: 'voice:status',
+  voiceStartRecording: 'voice:start-recording',
+  voiceStopRecording: 'voice:stop-recording',
+  voiceCancelRecording: 'voice:cancel-recording',
+  voiceRequestMicrophonePermission: 'voice:request-microphone-permission',
+
+  // Prompt enhancement
+  promptsStatus: 'prompts:status',
+  promptsTest: 'prompts:test',
+  promptsEnhance: 'prompts:enhance',
+
+  // Announcements (text-to-speech)
+  announcementsStatus: 'announcements:status',
+  announcementsTest: 'announcements:test',
+
+  // External multiplexer sessions
+  externalDiscover: 'external:discover',
+
+  // Diagnostics
+  systemDiagnostics: 'system:diagnostics',
+
   // Activity
   activityList: 'activity:list',
   activityClear: 'activity:clear',
@@ -62,7 +84,10 @@ export const IPC_EVENTS = {
   settingsChanged: 'settings:changed',
   windowMaximizedChanged: 'window:maximized-changed',
   appCloseRequested: 'app:close-requested',
-  systemInfoChanged: 'system:info-changed'
+  systemInfoChanged: 'system:info-changed',
+  voiceStatusChanged: 'voice:status-changed',
+  voiceHotkeyPressed: 'voice:hotkey-pressed',
+  announcementsAudio: 'announcements:audio'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

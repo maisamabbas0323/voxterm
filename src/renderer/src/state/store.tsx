@@ -11,14 +11,17 @@ import {
 import type {
   ActivityEvent,
   AgentProfileStatus,
+  CreateTerminalOptions,
   SystemInfo,
-  TerminalSessionInfo
+  TerminalSessionInfo,
+  VoiceStatus
 } from '@shared/types'
 import type { SecretsStatus, Settings } from '@shared/schemas'
 import type { AppCloseRequestPayload } from '@shared/api'
 import type { NavKey } from '../components/nav'
 import type { ToastRecord } from '../components/Toasts'
 import { terminalRegistry } from '../features/terminals/registry'
+import { voicePipeline } from '../features/voice/pipeline'
 
 interface State {
   status: 'loading' | 'ready' | 'error'
@@ -33,6 +36,7 @@ interface State {
   nav: NavKey
   toasts: ToastRecord[]
   closePrompt: AppCloseRequestPayload | null
+  voice: VoiceStatus | null
 }
 
 type Action =
@@ -45,6 +49,7 @@ type Action =
         activity: ActivityEvent[]
         system: SystemInfo
         agents: AgentProfileStatus[]
+        voice: VoiceStatus
       }
     }
   | { type: 'failed'; error: string }
@@ -61,12 +66,13 @@ type Action =
   | { type: 'toast-add'; toast: ToastRecord }
   | { type: 'toast-dismiss'; id: string }
   | { type: 'close-prompt'; payload: AppCloseRequestPayload | null }
+  | { type: 'voice'; voice: VoiceStatus | null }
 
 const initialState: State = {
   status: 'loading',
   error: null,
   settings: null,
-  secrets: { openrouter: false, google: false, elevenlabs: false },
+  secrets: { google: false, elevenlabs: false },
   sessions: [],
   activeSessionId: null,
   activity: [],
@@ -74,7 +80,8 @@ const initialState: State = {
   agents: [],
   nav: 'terminals',
   toasts: [],
-  closePrompt: null
+  closePrompt: null,
+  voice: null
 }
 
 function pickActive(sessions: TerminalSessionInfo[], current: string | null): string | null {
@@ -97,7 +104,8 @@ function reducer(state: State, action: Action): State {
         activeSessionId: pickActive(sessions, state.activeSessionId),
         activity: action.payload.activity,
         system: action.payload.system,
-        agents: action.payload.agents
+        agents: action.payload.agents,
+        voice: action.payload.voice
       }
     }
     case 'failed':
@@ -147,6 +155,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, toasts: state.toasts.filter((toast) => toast.id !== action.id) }
     case 'close-prompt':
       return { ...state, closePrompt: action.payload }
+    case 'voice':
+      return { ...state, voice: action.voice }
     default:
       return state
   }
@@ -155,7 +165,7 @@ function reducer(state: State, action: Action): State {
 interface AppActions {
   navigate: (key: NavKey) => void
   setActiveSession: (id: string) => void
-  createTerminal: (options?: { cwd?: string; title?: string; shell?: string; args?: string[] }) => Promise<TerminalSessionInfo | null>
+  createTerminal: (options?: CreateTerminalOptions) => Promise<TerminalSessionInfo | null>
   renameSession: (id: string, title: string) => Promise<void>
   closeSession: (id: string) => Promise<void>
   refreshSessions: () => Promise<void>
@@ -171,6 +181,7 @@ interface AppActions {
   toast: (message: string, tone?: ToastRecord['tone']) => void
   dismissToast: (id: string) => void
   respondToClose: (confirm: boolean) => Promise<void>
+  refreshVoice: () => Promise<void>
 }
 
 const AppContext = createContext<{ state: State; actions: AppActions } | null>(null)
@@ -182,6 +193,12 @@ function errorMessage(error: unknown): string {
 export function AppProvider({ children }: { children: ReactNode }): ReactNode {
   const [state, dispatch] = useReducer(reducer, initialState)
   const autoCreated = useRef(false)
+  // Read by the hotkey listener without re-subscribing on every status change.
+  const voiceRef = useRef<VoiceStatus | null>(null)
+  // Read by the transcription handler without re-subscribing.
+  const settingsRef = useRef<Settings | null>(null)
+  const navRef = useRef<NavKey>(state.nav)
+  const activeRef = useRef<string | null>(state.activeSessionId)
 
   const toast = useCallback((message: string, tone: ToastRecord['tone'] = 'info') => {
     dispatch({
@@ -215,6 +232,11 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
   const loadActivity = useCallback(async () => {
     const events = await window.voxterm.activity.list()
     dispatch({ type: 'activity', events })
+  }, [])
+
+  const refreshVoice = useCallback(async () => {
+    const voice = await window.voxterm.voice.status()
+    dispatch({ type: 'voice', voice })
   }, [])
 
   const createTerminal = useCallback<AppActions['createTerminal']>(
@@ -310,24 +332,92 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
     await window.voxterm.app.respondClose({ confirm })
   }, [])
 
+  // Keep the value the hotkey listener reads up to date.
+  useEffect(() => {
+    voiceRef.current = state.voice
+  }, [state.voice])
+
+  useEffect(() => {
+    settingsRef.current = state.settings
+  }, [state.settings])
+
+  useEffect(() => {
+    navRef.current = state.nav
+  }, [state.nav])
+
+  useEffect(() => {
+    activeRef.current = state.activeSessionId
+  }, [state.activeSessionId])
+
+  /**
+   * Turn a finished transcript into text in the active terminal.
+   *
+   * When auto-enhance is on the transcript is rewritten by the configured Gemma
+   * provider first; a failure keeps the raw transcript. When auto-insert is on
+   * the text is typed into the active terminal (never executed — the user still
+   * presses Enter). Otherwise it is copied to the clipboard so it is not lost.
+   */
+  const finishTranscription = useCallback(
+    async (rawText: string): Promise<void> => {
+      const settings = settingsRef.current
+      const sessionId = activeRef.current
+      let text = rawText.trim()
+      let enhancedBy: string | null = null
+
+      if (settings?.voice.autoEnhance) {
+        try {
+          const outcome = await window.voxterm.prompts.enhance({ text })
+          if (outcome.ok && outcome.enhanced.trim()) {
+            text = outcome.enhanced.trim()
+            enhancedBy = outcome.provider
+          }
+        } catch {
+          // Keep the raw transcript on any enhancement failure.
+        }
+      }
+
+      if (settings?.voice.autoInsert && sessionId) {
+        if (terminalRegistry.insertText(sessionId, text, false)) {
+          toast(
+            enhancedBy
+              ? `Inserted (enhanced with ${enhancedBy}). Press Enter to run.`
+              : 'Inserted. Press Enter to run.',
+            'success'
+          )
+          return
+        }
+      }
+
+      await window.voxterm.clipboard.writeText(text).catch(() => undefined)
+      toast(
+        enhancedBy
+          ? `Transcript copied to clipboard (enhanced with ${enhancedBy}).`
+          : 'Transcript copied to clipboard.',
+        'info'
+      )
+    },
+    [toast]
+  )
+
   // ---- Initial load + event subscriptions (set up exactly once) ----
   useEffect(() => {
     let cancelled = false
 
     const load = async (): Promise<void> => {
       try {
-        const [settings, secrets, sessions, activity, system, agents] = await Promise.all([
+        const [settings, secrets, sessions, activity, system, agents, voice] = await Promise.all([
           window.voxterm.settings.get(),
           window.voxterm.settings.secretsStatus(),
           window.voxterm.terminals.list(),
           window.voxterm.activity.list(),
           window.voxterm.system.info(),
-          window.voxterm.agents.list()
+          window.voxterm.agents.list(),
+          window.voxterm.voice.status()
         ])
         if (cancelled) return
         dispatch({
           type: 'init',
-          payload: { settings, secrets, sessions, activity, system, agents }
+          payload: { settings, secrets, sessions, activity, system, agents, voice }
         })
       } catch (error) {
         if (!cancelled) dispatch({ type: 'failed', error: errorMessage(error) })
@@ -336,19 +426,43 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
 
     void load()
 
+    // A finished capture is enhanced (optionally) and inserted into the active
+    // terminal by the same handler, so voice never needs its own page.
+    voicePipeline.onResult = (result) => {
+      if (result.ok && result.text.trim()) {
+        void finishTranscription(result.text)
+      } else if (!result.ok) {
+        toast(result.error ?? 'Transcription failed.', 'error')
+      } else {
+        toast('No speech was detected.', 'info')
+      }
+    }
+
     const unsubscribers = [
       window.voxterm.settings.onChanged((settings) => dispatch({ type: 'settings', settings })),
       window.voxterm.terminals.onSessionChanged((session) => dispatch({ type: 'upsert-session', session })),
       window.voxterm.terminals.onListChanged((sessions) => dispatch({ type: 'sessions', sessions })),
       window.voxterm.activity.onEvent((event) => dispatch({ type: 'activity-add', event })),
-      window.voxterm.app.onCloseRequested((payload) => dispatch({ type: 'close-prompt', payload }))
+      window.voxterm.app.onCloseRequested((payload) => dispatch({ type: 'close-prompt', payload })),
+      window.voxterm.voice.onStatusChanged((voice) => dispatch({ type: 'voice', voice })),
+      window.voxterm.voice.onHotkey((payload) => {
+        // Voice is only ever live on the Terminals view. When the user has
+        // restricted voice to the terminal (the default) a stray hotkey press
+        // anywhere else is ignored entirely.
+        const settings = settingsRef.current
+        const terminalOnly = settings?.voice.terminalOnly ?? true
+        if (terminalOnly && navRef.current !== 'terminals') return
+        voicePipeline.handleHotkey(payload, voiceRef.current)
+      })
     ]
 
     return () => {
       cancelled = true
+      voicePipeline.onResult = null
+      voicePipeline.dispose()
       for (const unsubscribe of unsubscribers) unsubscribe()
     }
-  }, [])
+  }, [toast, finishTranscription])
 
   // Initialise the xterm data router once.
   useEffect(() => {
@@ -396,7 +510,8 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
       clearSecret,
       toast,
       dismissToast,
-      respondToClose
+      respondToClose,
+      refreshVoice
     }),
     [
       createTerminal,
@@ -414,7 +529,8 @@ export function AppProvider({ children }: { children: ReactNode }): ReactNode {
       clearSecret,
       toast,
       dismissToast,
-      respondToClose
+      respondToClose,
+      refreshVoice
     ]
   )
 

@@ -12,6 +12,7 @@ import {
 } from '@shared/schemas'
 import { JsonStore } from '../util/jsonStore'
 import type { Logger } from '../util/logger'
+import { envSecret, envValue } from './envSecrets'
 
 interface SecretsFile {
   version: number
@@ -19,6 +20,68 @@ interface SecretsFile {
 }
 
 type Listener = (settings: Settings) => void
+
+/** Current on-disk settings version; bumped whenever a migration is added. */
+export const SETTINGS_VERSION = 2
+
+/**
+ * One-time upgrade for settings written before cloud providers became the
+ * requested default. Version 2:
+ * - turns on the Google AI Studio (hosted Gemma) provider,
+ * - clears both local-only switches so an explicitly configured cloud key is
+ *   actually used,
+ * - moves an old `Ctrl+F` voice hotkey off the key now reserved for find.
+ */
+function migrateSettings(settings: Settings): { settings: Settings; changed: boolean } {
+  if (settings.version >= SETTINGS_VERSION) return { settings, changed: false }
+  const hotkey = /^ctrl\s*\+\s*f$/i.test(settings.voice.hotkey.trim())
+    ? 'Ctrl+Alt+Space'
+    : settings.voice.hotkey
+  return {
+    changed: true,
+    settings: {
+      ...settings,
+      version: SETTINGS_VERSION,
+      voice: { ...settings.voice, hotkey },
+      prompts: {
+        ...settings.prompts,
+        localOnly: false,
+        google: { ...settings.prompts.google, enabled: true }
+      },
+      privacy: { ...settings.privacy, localOnlyMode: false }
+    }
+  }
+}
+
+/**
+ * Fill non-secret fields from the environment when the user has not chosen a
+ * value, so a `.env` file configures the app without any manual step. Only
+ * values still equal to the built-in default are replaced; anything the user
+ * has picked in Settings always wins. API keys are handled separately and are
+ * never copied into settings.
+ */
+function applyEnvironmentDefaults(settings: Settings): Settings {
+  let next = settings
+
+  if (next.announcements.voiceId.trim().length === 0) {
+    const voiceId = envValue('VOXTERM_ELEVENLABS_VOICE_ID')
+    if (voiceId) next = { ...next, announcements: { ...next.announcements, voiceId } }
+  }
+
+  if (next.announcements.modelId === DEFAULT_SETTINGS.announcements.modelId) {
+    const model = envValue('VOXTERM_ELEVENLABS_MODEL')
+    if (model) next = { ...next, announcements: { ...next.announcements, modelId: model } }
+  }
+
+  if (next.prompts.google.model === DEFAULT_SETTINGS.prompts.google.model) {
+    const model = envValue('VOXTERM_GOOGLE_MODEL')
+    if (model) {
+      next = { ...next, prompts: { ...next.prompts, google: { ...next.prompts.google, model } } }
+    }
+  }
+
+  return next
+}
 
 /**
  * Loads, validates and persists user settings plus secret credentials.
@@ -51,16 +114,22 @@ export class SettingsStore {
     if (read.corrupted) {
       this.recoveryIssues = [`settings.json was invalid (${read.error ?? 'parse error'})`]
       this.logger.warn('settings', `Corrupted settings file backed up to ${read.backupPath ?? 'n/a'}`)
-      this.settings = DEFAULT_SETTINGS
+      this.settings = applyEnvironmentDefaults(migrateSettings(DEFAULT_SETTINGS).settings)
       this.settingsStore.write(this.settings)
     } else {
       const { settings, issues } = parseSettings(read.data)
-      this.settings = settings
+      const migration = migrateSettings(settings)
+      const merged = applyEnvironmentDefaults(migration.settings)
+      const changed = migration.changed || merged !== migration.settings
+      this.settings = merged
       this.recoveryIssues = issues
       if (issues.length > 0) {
         this.logger.warn('settings', `Recovered invalid settings fields: ${issues.join('; ')}`)
         this.settingsStore.write(this.settings)
-      } else if (read.data === null) {
+      } else if (read.data === null || changed) {
+        if (changed && migration.changed) {
+          this.logger.info('settings', `Applied settings migration to version ${SETTINGS_VERSION}`)
+        }
         this.settingsStore.write(this.settings)
       }
     }
@@ -87,14 +156,21 @@ export class SettingsStore {
   secretsStatus(): SecretsStatus {
     const status = {} as SecretsStatus
     for (const slot of SECRET_SLOTS) {
-      status[slot] = Boolean(this.secrets.values[slot] && this.secrets.values[slot]!.length > 0)
+      const stored = this.secrets.values[slot]
+      status[slot] = Boolean((stored && stored.length > 0) || envSecret(slot))
     }
     return status
   }
 
-  /** Return a secret value for main-process use only. Never expose via IPC. */
+  /**
+   * Return a secret value for main-process use only. Never expose via IPC.
+   * A credential saved through the UI takes precedence over an environment
+   * default so the user can always override `.env` without editing it.
+   */
   getSecret(slot: SecretSlot): string | null {
-    return this.secrets.values[slot] ?? null
+    const stored = this.secrets.values[slot]
+    if (stored && stored.length > 0) return stored
+    return envSecret(slot)
   }
 
   setSecret(slot: string, value: string): boolean {

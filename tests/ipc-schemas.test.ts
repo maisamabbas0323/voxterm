@@ -21,7 +21,10 @@ describe('IPC payload validation', () => {
 
   it('rejects unknown credential slots', () => {
     expect(settingsSecretSchema.safeParse({ slot: 'unknown', value: 'x' }).success).toBe(false)
-    expect(settingsSecretSchema.safeParse({ slot: 'openrouter', value: 'x' }).success).toBe(true)
+    // OpenRouter was removed from the product; its old slot must stay rejected.
+    expect(settingsSecretSchema.safeParse({ slot: 'openrouter', value: 'x' }).success).toBe(false)
+    expect(settingsSecretSchema.safeParse({ slot: 'google', value: 'x' }).success).toBe(true)
+    expect(settingsSecretSchema.safeParse({ slot: 'elevenlabs', value: 'x' }).success).toBe(true)
   })
 
   it('only permits http(s) URLs for external opening', () => {

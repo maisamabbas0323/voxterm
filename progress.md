@@ -4,9 +4,69 @@ A premium, voice-ready terminal workspace for Linux (Electron + React + TypeScri
 
 **Status: complete and verified.** The app is a real, working Electron application
 — not a mockup. It boots, creates genuine `node-pty` shells, persists validated
-settings, mounts real xterm.js terminals and shuts down cleanly. Voice, prompt
-generation and spoken announcements remain intentionally scaffolded-only (honest
-limitations below).
+settings, mounts real xterm.js terminals, transcribes speech with ElevenLabs,
+enhances prompts with Ollama/Google and shuts down cleanly. Voice controls live in
+Settings; external tmux/screen sessions are discovered live and offered as
+attachable tabs. Honest limitations are listed below.
+
+---
+
+## Milestone 2 — Dictation, Gemma providers and live external tabs (this change)
+
+### Whisper removed; dictation now uses ElevenLabs
+- Deleted `src/main/voice/whisper.ts` and the whisper-model test. The vendored
+  `.deps/whisper.cpp` build and `scripts/setup-runtime.sh` are gone; the app no
+  longer touches a local inference runtime.
+- New `src/main/voice/elevenlabsStt.ts`: `POST https://api.elevenlabs.io/v1/speech-to-text`
+  with `xi-api-key`, multipart `file` + `model_id` (`scribe_v1` default) and an
+  optional `language_code`. Failures are returned as structured outcomes and the
+  API key is scrubbed from every message. 11 unit tests cover it.
+- `VoiceController` now derives readiness from the stored/environment key, exposes
+  `VoiceStatus.stt`, and reports `not-configured` honestly when no key exists.
+  `SystemInfo.whisper` became `SystemInfo.stt`.
+
+### Voice moved out of its own page
+- The **Voice nav tab and page were removed.** Voice controls now live in
+  Settings → Voice (enable, terminal-only, hotkey, model, language, min length,
+  auto-enhance, auto-insert). The review page and its store machinery were deleted.
+- A finished capture is now: optional Gemma enhancement → insert into the active
+  terminal (never executed) → toast. If auto-insert is off or there is no active
+  session, the text is copied to the clipboard so it is never lost.
+- The hotkey is only honoured on the Terminals view while `terminalOnly` is on
+  (the default), so a stray press can never open the microphone elsewhere.
+
+### Google uses the API key only; Ollama uses the user's setup
+- OpenRouter was removed from schemas, types, providers, service, IPC and UI. The
+  provider set is exactly `ollama` and `google`.
+- Google **always** targets `https://generativelanguage.googleapis.com/v1beta`
+  with `x-goog-api-key`; the base-URL field was removed from Settings. Ollama
+  keeps its configurable base URL/model and uses whatever the user has running.
+- Provider priority is chosen with two explicit "First/Second provider" selects.
+
+### Credentials from `.env` auto-fill Settings
+- `.env.example` documents `VOXTERM_GOOGLE_API_KEY`, `VOXTERM_ELEVENLABS_API_KEY`
+  and the optional non-secret `VOXTERM_GOOGLE_MODEL`,
+  `VOXTERM_ELEVENLABS_VOICE_ID`, `VOXTERM_ELEVENLABS_MODEL`.
+- A tiny self-contained loader (`settings/loadEnv.ts`) reads `.env` in the main
+  process only (no new dependency); the real environment always wins. `getSecret`
+  and `secretsStatus` fall back to it, so the GUI shows those keys as configured,
+  and non-secret defaults fill in when the setting is untouched.
+
+### Ctrl+F is scoped to the terminal
+- Find now only fires on the Terminals view. It is not consumed on any other page,
+  and `Ctrl+Shift+F` no longer navigates from elsewhere. The old `Ctrl+F` voice
+  toggle is gone; the default voice hotkey is `Ctrl+Alt+Space` (an existing
+  `Ctrl+F` binding is migrated automatically).
+
+### External sessions appear as tabs
+- While the Terminals view is open, tmux/screen discovery runs on a 15 s poll and
+  every attachable session is listed in a compact strip directly under the tabs —
+  one click attaches using the exact multiplexer target, without opening a dialog.
+
+### Settings migration
+- `settings.json` version 2 turns on the Google provider, clears both local-only
+  switches (so an explicitly configured cloud key is actually used) and moves an
+  old `Ctrl+F` hotkey off the key now reserved for find.
 
 ---
 
@@ -169,15 +229,20 @@ All commands run from the repo root on Kali (Linux), Oct 2026.
 | ----------------- | ------------------------ | --------------------------------------------- |
 | Types             | `npm run typecheck`      | PASS (node + web, no errors)                  |
 | Lint              | `npm run lint`           | PASS — 0 errors, 3 `react-refresh` warnings    |
-| Unit tests        | `npm test`               | PASS — 19 tests / 3 files                     |
+| Unit tests        | `npm test`               | PASS — 105 tests / 8 files                    |
 | Production build  | `npm run build`          | PASS — `out/{main,preload,renderer}` produced |
-| Runtime UI        | `npm run verify:ui`      | PASS — 25/25 checks                           |
+| Runtime UI        | `npm run verify:ui`      | PASS — 27/27 checks                           |
 | PTY under Electron| `scripts/verify-pty.cjs` | PASS                                          |
 | Env discovery     | `scripts/verify-env.cjs` | PASS                                          |
 
-Test files: `tests/settings.test.ts` (schema + section recovery),
+Test files: `tests/settings.test.ts` (schema + section recovery + migration),
 `tests/agents.test.ts` (launch-command/arg/env validation),
-`tests/ipc-schemas.test.ts` (IPC payload validation & clamping).
+`tests/ipc-schemas.test.ts` (IPC payload validation & clamping),
+`tests/prompts.test.ts` (Ollama/Google provider chain, redaction, local-only),
+`tests/elevenlabsStt.test.ts` (speech-to-text client), `tests/external.test.ts`
+(tmux/screen parsing and attach targeting), `tests/announcements.test.ts`
+(announcement routing and TTS request shape), `tests/env.test.ts`
+(`.env` secret mapping and file loader).
 
 The only lint output is three benign `react-refresh/only-export-components`
 warnings (files that intentionally export a component plus a helper) with **0
@@ -185,14 +250,16 @@ errors**.
 
 ### Runtime verification (`scripts/verify-ui.cjs`, headless under Xvfb)
 
-25/25 checks pass against the **built** app with a fresh user-data directory:
+27/27 checks pass against the **built** app with a fresh user-data directory:
 
 - app boots past the loading screen; **no renderer console errors**;
-- sidebar is compact (56 px) and all five nav icons stay **visible, inside the
+- sidebar is compact (60 px) and all four nav icons stay **visible, inside the
   rail and centred** — the collapsed-icon bug is fixed;
 - the branded "V" logo renders in the title bar;
-- every nav item is clickable and no page shows external-session wording, and
-  Settings has no "External sessions" section and no "AI" label tags;
+- the standalone **Voice nav item is gone** and every remaining nav item is
+  clickable;
+- the Terminals page exposes a real **attach control** and a terminal-scoped
+  **find control**, and Settings carries the "External sessions" section;
 - the terminal font is a dropdown (16 curated families) with a preview, and a
   fresh install's stored value resolves to a listed family ("JetBrains Mono"), not
   "Custom stack";
@@ -204,19 +271,42 @@ errors**.
 `VOXTERM_PTY_OK:` marker; `scripts/verify-env.cjs` prints a JSON snapshot of
 versions, shells, tmux/screen and coding-agent availability.
 
+### Live provider checks (real keys, 2026-10-18)
+
+Run ad-hoc against the configured credentials (never printed, never committed):
+
+- **Google (hosted Gemma):** `GET /v1beta/models?pageSize=1000` returned 200 with
+  46 usable models including `gemma-4-31b-it` and `gemma-4-26b-a4b-it`, and
+  `:generateContent` answered on both (one transient HTTP 500 succeeded on
+  retry). The Google path is verified end to end with the API key alone.
+- **Voice settings migration:** a profile holding the previous `settings.json`
+  (version 1) was loaded and rewritten as version 2 — `Ctrl+f` hotkey moved to
+  `Ctrl+Alt+Space`, the removed `whisper*`/`transcriptionProvider` keys dropped,
+  Google enabled and local-only cleared — exactly as documented above.
+- **ElevenLabs TTS:** a real synthesis request succeeded (16 kHz PCM returned).
+- **ElevenLabs STT:** the request reached the API and authenticated, but the
+  stored key is **missing the `speech_to_text` permission**, so transcription is
+  refused with `The API key you used is missing the permission speech_to_text`.
+  This is a credential-scope issue, not a code issue — our client surfaced the
+  message (with the key scrubbed). Grant the key the `speech_to_text` scope in
+  the ElevenLabs dashboard to enable dictation.
+
 ---
 
 ## Known limitations (honest)
 
-1. **Voice is not runtime-active.** No microphone capture, no transcription, no
-   announcement playback. The settings, `SystemInfo.whisper` readiness probes and
-   the Voice page exist so the next milestone can drop a real pipeline in. The
-   Voice page states this explicitly — it does not pretend to work.
-2. **Prompt generation is not runtime-active.** `prompts` settings (provider
-   priority, `localOnly`) are persisted and validated but nothing consumes them yet.
-3. **"Detected tooling" is informational only.** tmux/screen presence is reported
-   on the Workspace page; VoxTerm no longer attaches to or manages anything outside
-   its own sessions.
+1. **Dictation requires an ElevenLabs key with the `speech_to_text` scope.** The
+   key configured here can synthesize speech but is refused for transcription
+   (`missing the permission speech_to_text`) — grant that scope in the ElevenLabs
+   dashboard to enable dictation. With no key at all the UI says so and refuses to
+   record. There is no offline transcription path, and transcript text is never
+   written to the activity log.
+2. **Prompt enhancement requires a provider.** Ollama runs against whatever the
+   user has at its configured base URL (calls fail fast with a clear message when
+   nothing is listening); Google needs a key and respects local-only mode.
+3. **External sessions are attach-only.** tmux/screen discovery is live, but
+   VoxTerm never terminates a session it did not create, and closing an attached
+   tab only detaches.
 4. **Sandbox caveat in this environment.** The app was launched here under Xvfb
    with `--no-sandbox` (`VOXTERM_DISABLE_CHROMIUM_SANDBOX=1`) because the Chromium
    SUID sandbox is not configured in this container. `webPreferences.sandbox:true`
@@ -242,12 +332,35 @@ had been injected into `package.json` + the lockfile. It is unrelated to VoxTerm
 and was **removed**. No secrets, `.env` files or user data are committed; the
 userData directory (`~/.config/voxterm`) is not part of the repo.
 
+## Milestone update — verification pass (2026-10-17)
+
+All checks now run green and were verified in this session:
+
+- **typecheck** (`npm run typecheck`) — clean.
+- **tests** (`npm test`) — 81 passed / 6 files. Fixed 4 stale `tests/external.test.ts`
+  expectations: `ExternalSession` now carries the real `target`/`busy` fields the
+  attach flow depends on, and the tmux parser surfaces the documented
+  `"."`/`":"`-name targeting caveat via `reason`.
+- **lint** (`npm run lint`) — 0 errors / 3 fast-refresh warnings. Fixed:
+  `.deps/**` (vendored whisper.cpp checkout) added to eslint ignores so lint no
+  longer scans upstream sources; conditional `useState`/`useEffect` moved above
+  the early return in `SettingsPage`; `capture.ts` errors now preserve `cause`;
+  removed a useless expression in `capture.ts` teardown.
+- **build** (`npm run build`) — production build passes (~1.46 MB renderer).
+- **Runtime UI harnesses** (real Electron under Xvfb, CDP-attached):
+  `scripts/verify-ui.cjs` 25/25, `verify-tooltip.cjs` 4/4, `verify-workspace.cjs`
+  all checks passed. Two harness expectations were updated to match the shipped
+  feature set: the external-sessions section now exists in Settings, so the harness
+  asserts its presence (with real controls) instead of absence. `verify-ui.cjs`
+  also surfaces captured Electron stderr on failure to make CI debuggable.
+- **Whisper end-to-end (Linux)**: vendored `.deps/whisper.cpp/build/bin/whisper-cli` +
+  auto-discovered `~/Downloads/ggml-base.bin` (147 MB, magic-validated) performed a
+  real offline transcription of a generated wav (single 1.9 s segment). The
+  handler records the real path/duration/source and does not fabricate results.
+
 ## Next milestones
 
-- Prompt 2+: real voice capture → local Whisper transcription → prompt review →
-  send to the active session; announcement playback for configured event categories.
-- Prompt-generation pipeline honouring `localOnly` and provider priority.
 - Per-agent adapters enabling `promptInjection` / `structuredEvents`.
-- Optional: a packaging/release pass.
+- Optional: a packaging/release pass, and a real macOS/Windows verification run.
 
 See `agent.md` for architecture, the security model and extension points.

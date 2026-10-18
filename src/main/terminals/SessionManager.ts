@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import type { IPty } from 'node-pty'
-import type { CreateTerminalOptions, TerminalSessionInfo } from '@shared/types'
+import type { CreateTerminalOptions, SessionOrigin, TerminalSessionInfo } from '@shared/types'
 import type { Settings } from '@shared/schemas'
 import { resolveShell, resolveStartupDirectory } from './shell'
+import { findExecutable } from '../util/exec'
 import type { Logger } from '../util/logger'
 
 const MAX_PENDING_BUFFER = 256 * 1024
@@ -92,7 +93,39 @@ export class TerminalSessionManager {
   async create(options: CreateTerminalOptions = {}, context: CreateSessionContext = {}): Promise<TerminalSessionInfo> {
     const settings = this.deps.getSettings()
     const pathValue = await this.deps.resolvePath()
-    const shell = await resolveShell(options.shell ?? settings.terminal.defaultShell, pathValue)
+
+    // Attached multiplexer sessions run the multiplexer *client* itself. The
+    // command is built here from validated fields — the renderer can never pass
+    // arbitrary argv, and closing the tab only detaches our client.
+    let shell: { path: string; name: string }
+    let args: string[]
+    if (options.attach) {
+      const { kind, name, target, busy } = options.attach
+      const binary = await findExecutable(kind, pathValue)
+      if (!binary) {
+        throw new Error(`${kind} was not found on PATH; install it or disable external discovery.`)
+      }
+      shell = { path: binary, name: kind }
+      // Prefer the exact identifier discovery reported: tmux parses `-t` as
+      // `session:window.pane`, so names with `.` or `:` never resolve by name.
+      const identifier = target?.trim() || name
+      if (kind === 'tmux') {
+        // No `-d` anywhere: it would detach every other client from the session.
+        args = ['attach-session', '-t', identifier]
+      } else {
+        // `-r` only works on a detached session; a busy one needs shared mode
+        // (`-x`), which joins without disconnecting the existing client.
+        // `-d`/`-D` would kick that client, so they are never used.
+        args = busy ? ['-x', identifier] : ['-r', identifier]
+      }
+    } else {
+      shell = await resolveShell(options.shell ?? settings.terminal.defaultShell, pathValue)
+      args = options.args ?? []
+    }
+
+    const origin: SessionOrigin = options.attach
+      ? { kind: options.attach.kind, target: options.attach.name, detachOnly: true }
+      : { kind: 'managed', detachOnly: false }
 
     const configuredStartup =
       settings.terminal.newTerminalBehavior === 'configured' ? settings.terminal.startupDirectory : ''
@@ -130,7 +163,7 @@ export class TerminalSessionManager {
 
     let instance: IPty
     try {
-      instance = pty.spawn(shell.path, options.args ?? [], {
+      instance = pty.spawn(shell.path, args, {
         name: 'xterm-256color',
         cols,
         rows,
@@ -149,7 +182,9 @@ export class TerminalSessionManager {
     const now = Date.now()
     const info: TerminalSessionInfo = {
       id,
-      title: options.title?.trim() || `${shell.name}`,
+      title:
+        options.title?.trim() ||
+        (options.attach ? `${options.attach.kind}: ${options.attach.name}` : `${shell.name}`),
       shell: shell.path,
       shellName: shell.name,
       cwd,
@@ -160,7 +195,8 @@ export class TerminalSessionManager {
       exitCode: null,
       exitSignal: null,
       createdAt: now,
-      lastActiveAt: now
+      lastActiveAt: now,
+      origin
     }
 
     const session: ManagedSession = {

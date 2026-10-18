@@ -21,6 +21,36 @@ export const terminalCreateSchema = z.object({
   title: z.string().max(120).optional(),
   env: z
     .record(z.string().regex(ENV_KEY_PATTERN), z.string().max(2000))
+    .optional(),
+  /**
+   * Attach to an existing multiplexer session. Only the kind and the session
+   * name cross the bridge; the executable and argv are built in the main
+   * process so a renderer can never inject arbitrary launch arguments.
+   */
+  attach: z
+    .object({
+      kind: z.enum(['tmux', 'screen']),
+      name: z
+        .string()
+        .min(1)
+        .max(120)
+        .refine(
+          (value) => !/[\r\n\0]/.test(value) && !value.startsWith('-'),
+          'Session name may not contain control characters or start with "-".'
+        ),
+      /** Exact multiplexer target (`$N` for tmux, `pid.name` for screen). */
+      target: z
+        .string()
+        .min(1)
+        .max(200)
+        .refine(
+          (value) => !/[\r\n\0]/.test(value) && !value.startsWith('-'),
+          'Session target may not contain control characters or start with "-".'
+        )
+        .nullish(),
+      /** Another client already has it open — join in shared mode, never kick. */
+      busy: z.boolean().optional()
+    })
     .optional()
 })
 

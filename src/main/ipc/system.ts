@@ -9,7 +9,8 @@ export function registerSystemIpc(services: Services): void {
   ipcMain.handle(IPC.systemInfo, () =>
     buildSystemInfo({
       resolvePath: services.resolvePath,
-      getSettings: () => services.settings.get()
+      getSettings: () => services.settings.get(),
+      hasSttKey: () => Boolean(services.settings.getSecret('elevenlabs'))
     })
   )
 
