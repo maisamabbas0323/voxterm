@@ -19,7 +19,7 @@ honest human-in-the-loop workflow.
 [![tests](https://img.shields.io/badge/tests-105%20passing-28c840)](./tests)
 [![Hacktoberfest](https://img.shields.io/badge/Hacktoberfest-2026--Week%202-ff5f57?logo=digitalocean&logoColor=white)](https://hacktoberfest.com)
 
-<img src="docs/banner.svg" alt="VoxTerm banner" width="100%" />
+
 
 </div>
 
@@ -109,15 +109,6 @@ under Xvfb). The application code is written to be cross-platform and degrades
 gracefully, but only Linux packaging targets are configured today
 (`AppImage` + `deb` via electron-builder).
 
-| Capability | Linux | macOS | Windows |
-| --- | :-: | :-: | :-: |
-| typecheck · lint · 105 tests · build | ✅ | ⬜ needs a runner | ⬜ needs a runner |
-| UI smoke test (real Electron + CDP) | ✅ | ⬜ | ⬜ |
-| `node-pty` rebuild + shell adapters | ✅ | ⬜ | ⬜ |
-| Global voice hotkey (`uiohook-napi`) | ✅ X11 / ⚠️ Wayland* | ⬜ | ⬜ |
-
-\* On Wayland the global hook is unavailable, so VoxTerm falls back to an
-in-window hotkey and says so in the UI. X11 is fully supported.
 
 ---
 
